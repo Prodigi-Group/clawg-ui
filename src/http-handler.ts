@@ -245,6 +245,8 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
 
       // Return pairing pending response with device token and pairing code
       sendJson(res, 403, {
+        pairing_code: pairingCode,
+        bearer_token: deviceToken,
         error: {
           type: "pairing_pending",
           message: "Device pending approval",
@@ -270,7 +272,7 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     // Pairing check: verify device is approved
     // ---------------------------------------------------------------------------
     const storeAllowFrom = await runtime.channel.pairing
-      .readAllowFromStore("clawg-ui")
+      .readAllowFromStore({ channel: "clawg-ui", accountId: "default" })
       .catch(() => []);
     const normalizedAllowFrom = storeAllowFrom.map((e) =>
       e.replace(/^clawg-ui:/i, "").toLowerCase(),
@@ -314,6 +316,9 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     const hasUserMessage = messages.some((m) => m.role === "user");
     const hasToolMessage = messages.some((m) => m.role === "tool");
     if (!hasUserMessage && !hasToolMessage) {
+      console.log(
+        `[clawg-ui] 400: no user/tool message, roles=[${messages.map((m) => m.role).join(",")}], messageCount=${messages.length}`,
+      );
       sendJson(res, 400, {
         error: {
           message: "At least one user or tool message is required in `messages`.",
@@ -326,6 +331,9 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     // Build body from messages
     const { body: messageBody } = buildBodyFromMessages(messages);
     if (!messageBody.trim()) {
+      console.log(
+        `[clawg-ui] 400: empty extracted body, roles=[${messages.map((m) => m.role).join(",")}], contents=[${messages.map((m) => JSON.stringify(m.content)).join(",")}]`,
+      );
       sendJson(res, 400, {
         error: {
           message: "Could not extract a prompt from `messages`.",

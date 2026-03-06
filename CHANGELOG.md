@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.2.9 (2026-03-06)
 
 ### Fixed
+- Add `auth: "plugin"` to `registerHttpRoute` call — required by OpenClaw 2026.3.2; omitting it silently dropped the `/v1/clawg-ui` route, causing 404s
+- Pass `{ channel, accountId }` object to `readAllowFromStore` instead of a bare string — fixes 403 responses for approved devices after the pairing API changed in 2026.3.2
+- Add `pairing_code` and `bearer_token` at the root of the 403 pairing response alongside the existing nested `error.pairing` fields — restores compatibility with Kotlin `ClawgUIPairingResponse` clients expecting flat fields
+- Add diagnostic `console.log` for 400 responses to aid debugging of malformed requests
+
+### Changed
 - README event table was missing `TOOL_CALL_ARGS` and `TOOL_CALL_RESULT`; `tools` field incorrectly said "reserved for future use"
 - Integration tests used the gateway token directly instead of an HMAC-signed device token, causing 401s against v0.2.0+ servers
 - "Missing auth" integration test expected 401 instead of 403 (pairing initiation)
@@ -10,10 +16,10 @@
 ### Added
 - "Tool call events" documentation section explaining client vs server tool flows and diagnostic tips
 - Unit tests for `handleBeforeToolCall` and `handleToolResultPersist` hook handlers (`src/tool-hooks.test.ts`)
-
-### Changed
 - Extracted hook handlers from `index.ts` into exported named functions for testability (no behavioral change)
 - Integration tests now accept `CLAWG_UI_DEVICE_TOKEN` or auto-generate one from `OPENCLAW_GATEWAY_TOKEN` + `CLAWG_UI_DEVICE_ID`
+
+## Unreleased
 
 ## 0.2.8 (2026-02-26)
 
