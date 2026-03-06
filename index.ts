@@ -145,6 +145,7 @@ const plugin = {
     api.registerTool(clawgUiToolFactory);
     api.registerHttpRoute({
       path: "/v1/clawg-ui",
+      auth: "plugin",
       handler: createAguiHttpHandler(api),
     });
 
