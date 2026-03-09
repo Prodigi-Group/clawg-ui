@@ -170,7 +170,8 @@ const plugin: {
           .command("devices")
           .description("List approved devices")
           .action(async () => {
-            const devices = await api.runtime.channel.pairing.readAllowFromStore("clawg-ui");
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK types lag behind runtime
+            const devices = await (api.runtime.channel.pairing.readAllowFromStore as (arg: any) => Promise<string[]>)({ channel: "clawg-ui" });
             if (devices.length === 0) {
               console.log("No approved devices.");
               return;

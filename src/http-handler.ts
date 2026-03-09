@@ -271,8 +271,8 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     // ---------------------------------------------------------------------------
     // Pairing check: verify device is approved
     // ---------------------------------------------------------------------------
-    const storeAllowFrom = await runtime.channel.pairing
-      .readAllowFromStore("clawg-ui")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK types lag behind runtime; object form required in 2026.3.7+
+    const storeAllowFrom = await (runtime.channel.pairing.readAllowFromStore as (arg: any) => Promise<string[]>)({ channel: "clawg-ui" })
       .catch(() => []);
     const normalizedAllowFrom = storeAllowFrom.map((e) =>
       e.replace(/^clawg-ui:/i, "").toLowerCase(),
