@@ -135,7 +135,13 @@ export function handleToolResultPersist(
   }
 }
 
-const plugin = {
+const plugin: {
+  id: string;
+  name: string;
+  description: string;
+  configSchema: ReturnType<typeof emptyPluginConfigSchema>;
+  register: (api: OpenClawPluginApi) => void;
+} = {
   id: "clawg-ui",
   name: "CLAWG-UI",
   description: "AG-UI protocol endpoint for CopilotKit and HttpAgent clients",
@@ -143,7 +149,8 @@ const plugin = {
   register(api: OpenClawPluginApi) {
     api.registerChannel({ plugin: aguiChannelPlugin });
     api.registerTool(clawgUiToolFactory);
-    api.registerHttpRoute({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auth not yet in SDK typings but required at runtime
+    (api.registerHttpRoute as (params: any) => void)({
       path: "/v1/clawg-ui",
       auth: "plugin",
       handler: createAguiHttpHandler(api),
@@ -163,7 +170,8 @@ const plugin = {
           .command("devices")
           .description("List approved devices")
           .action(async () => {
-            const devices = await api.runtime.channel.pairing.readAllowFromStore("clawg-ui");
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK types lag behind runtime
+            const devices = await (api.runtime.channel.pairing.readAllowFromStore as (arg: any) => Promise<string[]>)({ channel: "clawg-ui" });
             if (devices.length === 0) {
               console.log("No approved devices.");
               return;

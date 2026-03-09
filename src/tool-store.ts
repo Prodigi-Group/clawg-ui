@@ -1,6 +1,6 @@
-import type { Tool } from "@ag-ui/core";
+import type { EventType, Tool } from "@ag-ui/core";
 
-export type EventWriter = (event: { type: string } & Record<string, unknown>) => void;
+export type EventWriter = (event: { type: EventType } & Record<string, unknown>) => void;
 
 /**
  * Per-session store for:

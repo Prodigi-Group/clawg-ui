@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.2 (2026-03-09)
+
+### Fixed
+- Pass `{ channel: "clawg-ui" }` object to `readAllowFromStore` — API changed again in OpenClaw 2026.3.7 (fixes #17)
+
+## 0.3.1 (2026-03-09)
+
+### Fixed
+- Compile TypeScript to `dist/` and point `openclaw.extensions` to `./dist/index.js` instead of `./index.ts` — fixes "loaded without install/load-path provenance" warning in OpenClaw 3.7
+- Keep `auth: "plugin"` on `registerHttpRoute` with a type cast — required at runtime but not yet in SDK typings (fixes #16)
+- Remove `onToolResult` from reply options — property is now explicitly omitted from the type
+- Use `EventType` enum instead of plain `string` in `EventWriter` type — fixes type mismatch with AG-UI core
+
+### Changed
+- Add `main`, `build`, and `prepublishOnly` fields to `package.json` for proper npm packaging
+- Add `declaration: true` and `exclude: ["**/*.test.ts"]` to `tsconfig.json`
+- Add explicit type annotation to `plugin` export to avoid non-portable inferred type
+
 ## 0.2.9 (2026-03-06)
 
 ### Fixed
