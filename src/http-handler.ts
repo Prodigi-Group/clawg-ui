@@ -272,7 +272,7 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     // Pairing check: verify device is approved
     // ---------------------------------------------------------------------------
     const storeAllowFrom = await runtime.channel.pairing
-      .readAllowFromStore({ channel: "clawg-ui", accountId: "default" })
+      .readAllowFromStore("clawg-ui")
       .catch(() => []);
     const normalizedAllowFrom = storeAllowFrom.map((e) =>
       e.replace(/^clawg-ui:/i, "").toLowerCase(),
@@ -585,9 +585,6 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
           abortSignal: abortController.signal,
           disableBlockStreaming: false,
           onAgentRunStart: () => {},
-          onToolResult: () => {
-            // Tool call events are emitted by before/after_tool_call hooks
-          },
         },
       });
 

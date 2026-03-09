@@ -135,7 +135,13 @@ export function handleToolResultPersist(
   }
 }
 
-const plugin = {
+const plugin: {
+  id: string;
+  name: string;
+  description: string;
+  configSchema: ReturnType<typeof emptyPluginConfigSchema>;
+  register: (api: OpenClawPluginApi) => void;
+} = {
   id: "clawg-ui",
   name: "CLAWG-UI",
   description: "AG-UI protocol endpoint for CopilotKit and HttpAgent clients",
@@ -145,7 +151,6 @@ const plugin = {
     api.registerTool(clawgUiToolFactory);
     api.registerHttpRoute({
       path: "/v1/clawg-ui",
-      auth: "plugin",
       handler: createAguiHttpHandler(api),
     });
 
