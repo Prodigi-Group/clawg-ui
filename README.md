@@ -141,7 +141,7 @@ The endpoint accepts a POST with a JSON body matching the AG-UI `RunAgentInput` 
 |---|---|---|---|
 | `threadId` | string | no | Conversation thread ID. Auto-generated if omitted. |
 | `runId` | string | no | Unique run ID. Auto-generated if omitted. |
-| `messages` | Message[] | yes | Array of messages. At least one `user` message required. |
+| `messages` | Message[] | yes | Array of messages. May be empty (returns an empty run). For agent execution, at least one `user` or `tool` message should be present. |
 | `tools` | Tool[] | no | Client-side tool definitions. The agent can invoke these; see [Tool call events](#tool-call-events). |
 | `state` | object | no | Client state (reserved for future use). |
 

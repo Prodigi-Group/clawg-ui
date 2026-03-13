@@ -222,8 +222,7 @@ describe("AG-UI HTTP handler", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("rejects messages with only system role with 400", async () => {
-    // Use an approved device token
+  it("returns empty run for messages with only system role", async () => {
     const token = createDeviceToken(GATEWAY_SECRET, APPROVED_DEVICE_ID);
     const req = createReq({
       headers: { authorization: `Bearer ${token}` },
@@ -235,7 +234,34 @@ describe("AG-UI HTTP handler", () => {
     });
     const res = createRes();
     await handler(req, res);
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(200);
+    const events = parseEvents(res._chunks);
+    expect(events.map((e) => e.type)).toEqual([
+      EventType.RUN_STARTED,
+      EventType.RUN_FINISHED,
+    ]);
+  });
+
+  it("returns empty run for empty messages array (AG-UI session init)", async () => {
+    const token = createDeviceToken(GATEWAY_SECRET, APPROVED_DEVICE_ID);
+    const req = createReq({
+      headers: { authorization: `Bearer ${token}` },
+      body: {
+        threadId: "t-empty",
+        runId: "r-empty",
+        messages: [],
+      },
+    });
+    const res = createRes();
+    await handler(req, res);
+    expect(res.statusCode).toBe(200);
+    const events = parseEvents(res._chunks);
+    expect(events.map((e) => e.type)).toEqual([
+      EventType.RUN_STARTED,
+      EventType.RUN_FINISHED,
+    ]);
+    expect(events[0].threadId).toBe("t-empty");
+    expect(events[0].runId).toBe("r-empty");
   });
 
   it("accepts tool-only messages (tool result submission)", async () => {
