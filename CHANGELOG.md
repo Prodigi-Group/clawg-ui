@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.3.3 (2026-03-13)
+## 0.4.0 (2026-03-13)
+
+### Added
+- `/v1/clawg-ui/info` endpoint for AG-UI agent discovery — returns configured agents (or a default `"main"` agent) so CopilotKit and other AG-UI clients can discover available agents on connect
 
 ### Fixed
 - Return a valid empty SSE run (`RUN_STARTED` + `RUN_FINISHED`) instead of 400 when `messages` is empty or contains no user/tool messages — restores AG-UI protocol compliance and fixes CopilotKit integration (fixes #18)
