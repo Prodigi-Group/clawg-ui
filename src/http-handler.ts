@@ -316,15 +316,26 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     const hasUserMessage = messages.some((m) => m.role === "user");
     const hasToolMessage = messages.some((m) => m.role === "tool");
     if (!hasUserMessage && !hasToolMessage) {
-      console.log(
-        `[clawg-ui] 400: no user/tool message, roles=[${messages.map((m) => m.role).join(",")}], messageCount=${messages.length}`,
+      // AG-UI protocol allows empty messages (used for session init/sync).
+      // Return a valid empty run instead of 400.
+      const accept =
+        typeof req.headers.accept === "string"
+          ? req.headers.accept
+          : "text/event-stream";
+      const encoder = new EventEncoder({ accept });
+      res.statusCode = 200;
+      res.setHeader("Content-Type", encoder.getContentType());
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders?.();
+      res.write(
+        encoder.encode({ type: EventType.RUN_STARTED, threadId, runId }),
       );
-      sendJson(res, 400, {
-        error: {
-          message: "At least one user or tool message is required in `messages`.",
-          type: "invalid_request_error",
-        },
-      });
+      res.write(
+        encoder.encode({ type: EventType.RUN_FINISHED, threadId, runId }),
+      );
+      res.end();
       return;
     }
 
