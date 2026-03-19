@@ -356,10 +356,16 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     const { body: messageBody } = buildBodyFromMessages(messages);
 
     // Format AG-UI context entries (if any) for injection into the agent prompt
-    const contextSuffix =
+    let contextSuffix =
       Array.isArray(input.context) && input.context.length > 0
         ? formatContextEntries(input.context as Array<{ description: string; value: string }>)
         : undefined;
+    
+    // Inject user email into context if provided (for task creation)
+    if (userEmailHeader) {
+      const userContext = `\n\n## User Context\n\nCurrent user email: ${userEmailHeader}`;
+      contextSuffix = contextSuffix ? contextSuffix + userContext : userContext;
+    }
 
     if (!messageBody.trim()) {
       console.log(
@@ -385,6 +391,12 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     const sessionKeyHeader =
       typeof req.headers["x-openclaw-session-key"] === "string"
         ? req.headers["x-openclaw-session-key"]
+        : undefined;
+    
+    // Extract user email for task creation
+    const userEmailHeader =
+      typeof req.headers["x-user-email"] === "string"
+        ? req.headers["x-user-email"]
         : undefined;
     
     const route = runtime.channel.routing.resolveAgentRoute({
