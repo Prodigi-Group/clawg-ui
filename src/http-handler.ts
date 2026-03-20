@@ -326,8 +326,14 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       ? input.messages
       : [];
 
+    // Log incoming messages for debugging tool result flow
+    console.log(`[clawg-ui] Incoming messages (${messages.length}):`, 
+      messages.map(m => ({ role: m.role, contentType: typeof m.content, content: JSON.stringify(m.content)?.slice(0, 200) }))
+    );
+
     const hasUserMessage = messages.some((m) => m.role === "user");
     const hasToolMessage = messages.some((m) => m.role === "tool");
+    console.log(`[clawg-ui] hasUserMessage=${hasUserMessage}, hasToolMessage=${hasToolMessage}`);
     if (!hasUserMessage && !hasToolMessage) {
       // AG-UI protocol allows empty messages (used for session init/sync).
       // Return a valid empty run instead of 400.
