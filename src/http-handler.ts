@@ -508,18 +508,10 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       body: messageBody,
     });
 
-    // Build BodyForAgent: systemPrompt (if any) + envelopedBody + contextSuffix
+    // Build BodyForAgent: envelopedBody + contextSuffix (systemPrompt is passed separately via GroupSystemPrompt)
     let bodyForAgent: string | undefined;
-    if (systemPrompt || contextSuffix) {
-      const parts: string[] = [];
-      if (systemPrompt) {
-        parts.push(systemPrompt);
-      }
-      parts.push(envelopedBody);
-      if (contextSuffix) {
-        parts.push(contextSuffix);
-      }
-      bodyForAgent = parts.join("\n\n");
+    if (contextSuffix) {
+      bodyForAgent = envelopedBody + "\n\n" + contextSuffix;
     }
 
     const ctxPayload = runtime.channel.reply.finalizeInboundContext({
@@ -531,6 +523,8 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       To: "clawg-ui",
       SessionKey: sessionKey,
       ChatType: "direct",
+      // Pass system messages through as GroupSystemPrompt so OpenClaw includes them in LLM request
+      GroupSystemPrompt: systemPrompt,
       ConversationLabel: "AG-UI",
       SenderName: "AG-UI Client",
       SenderId: deviceId,
