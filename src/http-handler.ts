@@ -352,20 +352,14 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       return;
     }
 
-    // Build body from messages
-    const { body: messageBody } = buildBodyFromMessages(messages);
+    // Build body from messages (now includes systemPrompt)
+    const { body: messageBody, systemPrompt } = buildBodyFromMessages(messages);
 
     // Format AG-UI context entries (if any) for injection into the agent prompt
     let contextSuffix =
       Array.isArray(input.context) && input.context.length > 0
         ? formatContextEntries(input.context as Array<{ description: string; value: string }>)
         : undefined;
-    
-    // Inject user email into context if provided (for task creation)
-    if (userEmailHeader) {
-      const userContext = `\n\n## User Context\n\nCurrent user email: ${userEmailHeader}`;
-      contextSuffix = contextSuffix ? contextSuffix + userContext : userContext;
-    }
 
     if (!messageBody.trim()) {
       console.log(
@@ -514,9 +508,23 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       body: messageBody,
     });
 
+    // Build BodyForAgent: systemPrompt (if any) + envelopedBody + contextSuffix
+    let bodyForAgent: string | undefined;
+    if (systemPrompt || contextSuffix) {
+      const parts: string[] = [];
+      if (systemPrompt) {
+        parts.push(systemPrompt);
+      }
+      parts.push(envelopedBody);
+      if (contextSuffix) {
+        parts.push(contextSuffix);
+      }
+      bodyForAgent = parts.join("\n\n");
+    }
+
     const ctxPayload = runtime.channel.reply.finalizeInboundContext({
       Body: envelopedBody,
-      BodyForAgent: contextSuffix ? envelopedBody + contextSuffix : undefined,
+      BodyForAgent: bodyForAgent,
       RawBody: messageBody,
       CommandBody: messageBody,
       From: `clawg-ui:${deviceId}`,
