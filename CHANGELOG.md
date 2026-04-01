@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.0 (2026-04-01)
+
+### Changed
+- **Breaking:** Peer ID now uses the stable device UUID instead of the per-thread ID. This enables identity linking (`session.identityLinks`) so clawg-ui devices can be linked to users across channels, matching how Telegram and Slack connections work.
+- Session keys now include a `:thread:<threadId>` suffix for per-thread session separation (same pattern as Slack thread sessions).
+
+### Migration
+- **Identity linking:** You can now add clawg-ui device IDs to `session.identityLinks` in `openclaw.json`:
+  ```json
+  {
+    "session": {
+      "dmScope": "per-peer",
+      "identityLinks": {
+        "alice": ["clawg-ui:<deviceId>", "telegram:123456", "slack:U0123ABC"]
+      }
+    }
+  }
+  ```
+  The device UUID is shown during pairing approval (`openclaw pairing list clawg-ui`).
+- **Session history:** Existing session histories are keyed on the old format (`clawg-ui-<threadId>` peer). After upgrading, devices will start new sessions. No data is lost — old sessions remain in the store but won't be matched by the new key format.
+
 ## 0.4.5 (2026-03-15)
 
 ### Added
