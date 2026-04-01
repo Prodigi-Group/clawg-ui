@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 (2026-04-01)
+
+### Fixed
+- Add `match: "exact"` to `registerHttpRoute` call — required by OpenClaw 2026.3.23+ which changed the plugin HTTP route API to require an explicit match mode. Without it, the route registers silently but never matches incoming requests, resulting in a 404. Backwards compatible with older OpenClaw versions (unknown properties are ignored).
+
 ## 0.5.0 (2026-04-01)
 
 ### Changed

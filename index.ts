@@ -149,9 +149,10 @@ const plugin: {
   register(api: OpenClawPluginApi) {
     api.registerChannel({ plugin: aguiChannelPlugin });
     api.registerTool(clawgUiToolFactory);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auth not yet in SDK typings but required at runtime
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auth/match not yet in SDK typings but required at runtime
     (api.registerHttpRoute as (params: any) => void)({
       path: "/v1/clawg-ui",
+      match: "exact",
       auth: "plugin",
       handler: createAguiHttpHandler(api),
     });
