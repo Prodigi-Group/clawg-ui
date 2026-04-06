@@ -125,7 +125,7 @@ describe("Tool event hooks", () => {
       expect(mock.events).toHaveLength(4);
       expect(mock.events[2].type).toBe(EventType.TOOL_CALL_RESULT);
       expect(mock.events[2].toolCallId).toBe(toolCallId);
-      expect(mock.events[2].messageId).toBe("msg-001");
+      expect(mock.events[2].messageId).toBe(`msg-tool-${toolCallId}`);
       expect(mock.events[3].type).toBe(EventType.TOOL_CALL_END);
       expect(mock.events[3].toolCallId).toBe(toolCallId);
     });

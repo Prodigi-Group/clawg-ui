@@ -134,10 +134,13 @@ export function handleToolResultPersist(
     console.log(
       `[clawg-ui] tool_result_persist: emitting TOOL_CALL_RESULT and TOOL_CALL_END`,
     );
+    // Use a dedicated messageId for the tool result so it doesn't collide
+    // with the text message messageId. Tool events are linked via toolCallId.
+    const toolResultMessageId = `msg-tool-${toolCallId}`;
     writer({
       type: EventType.TOOL_CALL_RESULT,
       toolCallId,
-      messageId,
+      messageId: toolResultMessageId,
       content: resultText,
     });
 
