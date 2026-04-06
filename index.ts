@@ -149,11 +149,10 @@ const plugin: {
   register(api: OpenClawPluginApi) {
     api.registerChannel({ plugin: aguiChannelPlugin });
     api.registerTool(clawgUiToolFactory);
-    // Use registerPluginHttpRoute from plugin-runtime which writes directly to
+    // Use registerPluginHttpRoute from plugin-sdk which writes directly to
     // the pinned HTTP route registry. api.registerHttpRoute writes to the
     // loader's private registry which is not the one the HTTP handler reads.
-    // @ts-expect-error -- openclaw/plugin-sdk/plugin-runtime is not in local SDK typings but exists at runtime
-    import("openclaw/plugin-sdk/plugin-runtime").then((mod: any) => {
+    import("openclaw/plugin-sdk").then((mod: any) => {
       mod.registerPluginHttpRoute({
         path: "/v1/clawg-ui",
         auth: "plugin",
