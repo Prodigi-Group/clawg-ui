@@ -186,15 +186,16 @@ const plugin: {
         // examples/ not available (npm install) — skip
       });
 
-    // Use registerPluginHttpRoute from plugin-sdk which writes directly to
-    // the pinned HTTP route registry. api.registerHttpRoute writes to the
-    // loader's private registry which is not the one the HTTP handler reads.
-    import("openclaw/plugin-sdk").then((mod: any) => {
-      mod.registerPluginHttpRoute({
+    // Register HTTP route via gateway_start hook to ensure the pinned HTTP
+    // route registry is available (api.registerHttpRoute in register() runs
+    // before the registry is pinned, so routes are silently lost).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- gateway_start not yet in SDK typings
+    (api.on as any)("gateway_start", () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auth/match not yet in SDK typings
+      (api.registerHttpRoute as (params: any) => void)({
         path: "/v1/clawg-ui",
-        auth: "plugin",
         match: "exact",
-        pluginId: "clawg-ui",
+        auth: "plugin",
         handler: createAguiHttpHandler(api),
       });
     });
