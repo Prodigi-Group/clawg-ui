@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.3 (2026-04-07)
+
+### Added
+- **A2UI v0.9 support** — detect `{ "a2ui_operations": [...] }` in server-side tool results and emit `ACTIVITY_SNAPSHOT` events over the AG-UI SSE stream. CopilotKit clients with A2UI rendering enabled will display rich interactive surfaces (cards, lists, forms) instead of raw JSON.
+- **`cron_report` example tool** (`examples/cron-report-tool.ts`) — server-side tool that wraps cron job run data in a fixed A2UI v0.9 card layout (horizontal scrollable list of cards with startedAt, duration, model, tokensUsed, summary). Registered as `optional: true` — agents must opt in via `tools.alsoAllow: ["cron_report"]`.
+- **Example setup guide** (`examples/SETUP.md`) — step-by-step instructions for configuring a dedicated cron report demo agent with `X-OpenClaw-Agent-Id` header routing.
+- New `src/a2ui.ts` module with detection utilities: `tryParseA2UIOperations`, `extractToolResultText`, `groupBySurface`, `getOperationSurfaceId`.
+
+### Fixed
+- **CopilotKit compatibility: single-run event stream** — removed `splitRunIfToolFired()` which split tool calls and text into separate AG-UI runs. CopilotKit closes the SSE connection on `RUN_FINISHED`, so the second run's text was never received. The entire agent turn (tool calls + follow-up text) now stays in a single `RUN_STARTED`/`RUN_FINISHED` pair.
+- **`TOOL_CALL_RESULT` content** — was always emitted as `content: ""`. Now populated with the actual tool result text extracted from the OpenClaw `tool_result_persist` hook event.
+- **`messageId` collision** — `TOOL_CALL_RESULT` and `TEXT_MESSAGE_START` shared the same `messageId`, causing CopilotKit to overwrite the tool result with the text message. Tool results now use a dedicated `messageId` (`msg-tool-<toolCallId>`), while text messages keep `msg-<uuid>`.
+- **HTTP route registration** — restored the proven v0.5.4 pattern (`registerPluginHttpRoute` via `openclaw/plugin-sdk/plugin-runtime`) after the `gateway_start` hook approach (0.6.1) caused 404s on deployed servers.
+
+### Changed
+- Examples are excluded from the npm package (`!dist/examples` in `files`). The `cron_report` tool loads via dynamic import with a silent `.catch()` fallback — safe for npm installs where `examples/` doesn't exist.
+
 ## 0.5.4 (2026-04-02)
 
 ### Fixed
