@@ -10,8 +10,6 @@ import {
   clearWriter,
   markClientToolNames,
   clearClientToolNames,
-  clearToolFiredInRun,
-  wasToolFiredInRun,
 } from "./tool-store.js";
 import {
   handleBeforeToolCall,
@@ -47,7 +45,6 @@ describe("Tool event hooks", () => {
   afterEach(() => {
     clearWriter(SESSION_KEY);
     clearClientToolNames(SESSION_KEY);
-    clearToolFiredInRun(SESSION_KEY);
   });
 
   // -------------------------------------------------------------------------
@@ -100,16 +97,6 @@ describe("Tool event hooks", () => {
       expect(mock.events[1].type).toBe(EventType.TOOL_CALL_END);
     });
 
-    it("sets toolFiredInRun flag", () => {
-      expect(wasToolFiredInRun(SESSION_KEY)).toBe(false);
-
-      handleBeforeToolCall(
-        { toolName: "get_weather", params: { city: "Tokyo" } },
-        { sessionKey: SESSION_KEY },
-      );
-
-      expect(wasToolFiredInRun(SESSION_KEY)).toBe(true);
-    });
   });
 
   // -------------------------------------------------------------------------
@@ -138,7 +125,7 @@ describe("Tool event hooks", () => {
       expect(mock.events).toHaveLength(4);
       expect(mock.events[2].type).toBe(EventType.TOOL_CALL_RESULT);
       expect(mock.events[2].toolCallId).toBe(toolCallId);
-      expect(mock.events[2].messageId).toBe("msg-001");
+      expect(mock.events[2].messageId).toBe(`msg-tool-${toolCallId}`);
       expect(mock.events[3].type).toBe(EventType.TOOL_CALL_END);
       expect(mock.events[3].toolCallId).toBe(toolCallId);
     });
@@ -148,6 +135,81 @@ describe("Tool event hooks", () => {
       handleToolResultPersist({}, { sessionKey: SESSION_KEY });
 
       expect(mock.events).toHaveLength(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // A2UI detection
+  // -------------------------------------------------------------------------
+
+  describe("A2UI tool results", () => {
+    it("emits ACTIVITY_SNAPSHOT for A2UI tool results", () => {
+      handleBeforeToolCall(
+        { toolName: "cron_report", params: { runs: [] } },
+        { sessionKey: SESSION_KEY },
+      );
+
+      const toolCallId = mock.events[0].toolCallId;
+
+      const a2uiJson = JSON.stringify({
+        a2ui_operations: [
+          { version: "v0.9", createSurface: { surfaceId: "cron-report" } },
+          { version: "v0.9", updateComponents: { surfaceId: "cron-report", components: [] } },
+        ],
+      });
+
+      handleToolResultPersist(
+        { message: { content: [{ type: "text", text: a2uiJson }] } },
+        { sessionKey: SESSION_KEY },
+      );
+
+      // Events: START, ARGS, RESULT, ACTIVITY_SNAPSHOT, END
+      expect(mock.events).toHaveLength(5);
+      expect(mock.events[2].type).toBe(EventType.TOOL_CALL_RESULT);
+      expect(mock.events[2].content).toBe(a2uiJson);
+
+      expect(mock.events[3].type).toBe(EventType.ACTIVITY_SNAPSHOT);
+      expect(mock.events[3].activityType).toBe("a2ui-surface");
+      expect(mock.events[3].replace).toBe(true);
+      expect(mock.events[3].messageId).toContain("a2ui-surface-cron-report-");
+      expect(mock.events[3].messageId).toContain(toolCallId as string);
+
+      expect(mock.events[4].type).toBe(EventType.TOOL_CALL_END);
+    });
+
+    it("does not emit ACTIVITY_SNAPSHOT for non-A2UI results", () => {
+      handleBeforeToolCall(
+        { toolName: "search_db", params: { q: "test" } },
+        { sessionKey: SESSION_KEY },
+      );
+
+      handleToolResultPersist(
+        { message: { content: [{ type: "text", text: "plain result" }] } },
+        { sessionKey: SESSION_KEY },
+      );
+
+      // Events: START, ARGS, RESULT, END (no ACTIVITY_SNAPSHOT)
+      expect(mock.events).toHaveLength(4);
+      expect(mock.events[2].type).toBe(EventType.TOOL_CALL_RESULT);
+      expect(mock.events[2].content).toBe("plain result");
+      expect(mock.events[3].type).toBe(EventType.TOOL_CALL_END);
+    });
+
+    it("populates TOOL_CALL_RESULT content from event.message", () => {
+      handleBeforeToolCall(
+        { toolName: "my_tool", params: {} },
+        { sessionKey: SESSION_KEY },
+      );
+
+      handleToolResultPersist(
+        { message: { content: [{ type: "text", text: "actual content" }] } },
+        { sessionKey: SESSION_KEY },
+      );
+
+      const resultEvent = mock.events.find(
+        (e) => e.type === EventType.TOOL_CALL_RESULT,
+      );
+      expect(resultEvent?.content).toBe("actual content");
     });
   });
 
