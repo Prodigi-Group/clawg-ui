@@ -13,8 +13,13 @@ import {
   popToolCallId,
   isClientTool,
   setClientToolCalled,
-  setToolFiredInRun,
 } from "./src/tool-store.js";
+import {
+  extractToolResultText,
+  tryParseA2UIOperations,
+  groupBySurface,
+  A2UI_OPERATIONS_KEY,
+} from "./src/a2ui.js";
 
 // ---------------------------------------------------------------------------
 // Hook handlers — exported for testability
@@ -61,7 +66,6 @@ export function handleBeforeToolCall(
     toolCallId,
     toolCallName: event.toolName,
   });
-  setToolFiredInRun(sk);
   if (event.params && Object.keys(event.params).length > 0) {
     console.log(
       `[clawg-ui] before_tool_call: emitting TOOL_CALL_ARGS, params=${JSON.stringify(event.params)}`,
@@ -119,15 +123,42 @@ export function handleToolResultPersist(
     `[clawg-ui] tool_result_persist: writer=${writer ? "present" : "missing"}, toolCallId=${toolCallId ?? "none"}, messageId=${messageId ?? "none"}`,
   );
   if (writer && toolCallId && messageId) {
+    // Extract actual tool result text from event.message.content
+    const msg = (event as Record<string, unknown>).message as
+      | { content?: unknown }
+      | undefined;
+    const resultText = msg?.content
+      ? extractToolResultText(msg.content)
+      : "";
+
     console.log(
       `[clawg-ui] tool_result_persist: emitting TOOL_CALL_RESULT and TOOL_CALL_END`,
     );
+    // Use a dedicated messageId for the tool result so it doesn't collide
+    // with the text message messageId. Tool events are linked via toolCallId.
+    const toolResultMessageId = `msg-tool-${toolCallId}`;
     writer({
       type: EventType.TOOL_CALL_RESULT,
       toolCallId,
-      messageId,
-      content: "",
+      messageId: toolResultMessageId,
+      content: resultText,
     });
+
+    // Detect A2UI and emit ACTIVITY_SNAPSHOT per surface
+    const a2uiOps = tryParseA2UIOperations(resultText);
+    if (a2uiOps) {
+      const groups = groupBySurface(a2uiOps);
+      for (const [surfaceId, ops] of groups) {
+        writer({
+          type: EventType.ACTIVITY_SNAPSHOT,
+          messageId: `a2ui-surface-${surfaceId}-${toolCallId}`,
+          activityType: "a2ui-surface",
+          content: { [A2UI_OPERATIONS_KEY]: ops },
+          replace: true,
+        });
+      }
+    }
+
     writer({
       type: EventType.TOOL_CALL_END,
       toolCallId,
@@ -149,11 +180,27 @@ const plugin: {
   register(api: OpenClawPluginApi) {
     api.registerChannel({ plugin: aguiChannelPlugin });
     api.registerTool(clawgUiToolFactory);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- auth not yet in SDK typings but required at runtime
-    (api.registerHttpRoute as (params: any) => void)({
-      path: "/v1/clawg-ui",
-      auth: "plugin",
-      handler: createAguiHttpHandler(api),
+    // Example tools (not published to npm — live in examples/)
+    import("./examples/cron-report-tool.js")
+      .then(({ cronReportToolFactory }) => {
+        api.registerTool(cronReportToolFactory, { name: "cron_report", optional: true });
+      })
+      .catch(() => {
+        // examples/ not available (npm install) — skip
+      });
+
+    // Use registerPluginHttpRoute from plugin-runtime which writes directly to
+    // the pinned HTTP route registry. api.registerHttpRoute writes to the
+    // loader's private registry which is not the one the HTTP handler reads.
+    // @ts-expect-error -- openclaw/plugin-sdk/plugin-runtime is not in local SDK typings but exists at runtime
+    import("openclaw/plugin-sdk/plugin-runtime").then((mod: any) => {
+      mod.registerPluginHttpRoute({
+        path: "/v1/clawg-ui",
+        auth: "plugin",
+        match: "exact",
+        pluginId: "clawg-ui",
+        handler: createAguiHttpHandler(api),
+      });
     });
 
     api.on("before_tool_call", handleBeforeToolCall);

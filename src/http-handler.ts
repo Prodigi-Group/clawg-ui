@@ -12,11 +12,9 @@ import {
   wasClientToolCalled,
   clearClientToolCalled,
   clearClientToolNames,
-  wasToolFiredInRun,
-  clearToolFiredInRun,
 } from "./tool-store.js";
 import { aguiChannelPlugin } from "./channel.js";
-import { resolveGatewaySecret } from "./gateway-secret.js";
+import { resolveGatewaySecret, resolveTrustedToken } from "./gateway-secret.js";
 
 // ---------------------------------------------------------------------------
 // Lightweight HTTP helpers (no internal imports needed)
@@ -204,6 +202,7 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
 
   // Resolve once at init so the per-request handler never touches env vars.
   const gatewaySecret = resolveGatewaySecret(api);
+  const trustedToken = resolveTrustedToken();
 
   return async function handleAguiRequest(
     req: IncomingMessage,
@@ -273,33 +272,44 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       return;
     }
 
-    // Device token flow: verify HMAC signature, extract device ID
-    const extractedDeviceId = verifyDeviceToken(bearerToken, gatewaySecret);
-    if (!extractedDeviceId) {
-      sendUnauthorized(res);
-      return;
-    }
-    deviceId = extractedDeviceId;
-
     // ---------------------------------------------------------------------------
-    // Pairing check: verify device is approved
+    // Trusted token bypass: skip pairing entirely for pre-authorised back-ends.
+    // When CLAWG_UI_TRUSTED_TOKEN is set in the environment, a request carrying
+    // that exact Bearer token is accepted without device registration or approval.
     // ---------------------------------------------------------------------------
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK types lag behind runtime; object form required in 2026.3.7+
-    const storeAllowFrom = await (runtime.channel.pairing.readAllowFromStore as (arg: any) => Promise<string[]>)({ channel: "clawg-ui" })
-      .catch(() => []);
-    const normalizedAllowFrom = storeAllowFrom.map((e) =>
-      e.replace(/^clawg-ui:/i, "").toLowerCase(),
-    );
-    const allowed = normalizedAllowFrom.includes(deviceId.toLowerCase());
+    if (trustedToken !== null &&
+        bearerToken.length === trustedToken.length &&
+        timingSafeEqual(Buffer.from(bearerToken), Buffer.from(trustedToken))) {
+      deviceId = "trusted-gateway";
+    } else {
+      // Device token flow: verify HMAC signature, extract device ID
+      const extractedDeviceId = verifyDeviceToken(bearerToken, gatewaySecret);
+      if (!extractedDeviceId) {
+        sendUnauthorized(res);
+        return;
+      }
+      deviceId = extractedDeviceId;
 
-    if (!allowed) {
-      sendJson(res, 403, {
-        error: {
-          type: "pairing_pending",
-          message: "Device pending approval. Ask the owner to approve using the pairing code from your initial pairing response.",
-        },
-      });
-      return;
+      // ---------------------------------------------------------------------------
+      // Pairing check: verify device is approved
+      // ---------------------------------------------------------------------------
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK types lag behind runtime; object form required in 2026.3.7+
+      const storeAllowFrom = await (runtime.channel.pairing.readAllowFromStore as (arg: any) => Promise<string[]>)({ channel: "clawg-ui" })
+        .catch(() => []);
+      const normalizedAllowFrom = storeAllowFrom.map((e) =>
+        e.replace(/^clawg-ui:/i, "").toLowerCase(),
+      );
+      const allowed = normalizedAllowFrom.includes(deviceId.toLowerCase());
+
+      if (!allowed) {
+        sendJson(res, 403, {
+          error: {
+            type: "pairing_pending",
+            message: "Device pending approval. Ask the owner to approve using the pairing code from your initial pairing response.",
+          },
+        });
+        return;
+      }
     }
 
     // ---------------------------------------------------------------------------
@@ -402,7 +412,7 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     const route = runtime.channel.routing.resolveAgentRoute({
       cfg,
       channel: "clawg-ui",
-      peer: { kind: "dm", id: `clawg-ui-${threadId}` },
+      peer: { kind: "dm", id: deviceId },
       accountId: agentIdHeader,
     });
 
@@ -436,40 +446,6 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       }
     };
 
-    // If a tool call was emitted in the current run, finish that run and start
-    // a fresh one for text messages. This keeps tool events and text events in
-    // separate runs per the AG-UI protocol.
-    const splitRunIfToolFired = () => {
-      if (!wasToolFiredInRun(sessionKey)) {
-        return;
-      }
-      // Close any open text message before ending the run
-      if (messageStarted) {
-        writeEvent({
-          type: EventType.TEXT_MESSAGE_END,
-          messageId: currentMessageId,
-          runId: currentRunId,
-        });
-        messageStarted = false;
-      }
-      // End the tool run
-      writeEvent({
-        type: EventType.RUN_FINISHED,
-        threadId,
-        runId: currentRunId,
-      });
-      // Start a new run for text messages
-      currentRunId = `clawg-ui-run-${randomUUID()}`;
-      currentMessageId = `msg-${randomUUID()}`;
-      messageStarted = false;
-      clearToolFiredInRun(sessionKey);
-      writeEvent({
-        type: EventType.RUN_STARTED,
-        threadId,
-        runId: currentRunId,
-      });
-    };
-
     // Handle client disconnect
     req.on("close", () => {
       closed = true;
@@ -483,8 +459,10 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     });
 
     // Build inbound context using the plugin runtime (same pattern as msteams)
-    // Use custom session key from header if provided (enables per-user session isolation)
-    const sessionKey = sessionKeyHeader || route.sessionKey;
+    // Header-based session key takes priority (enables per-user isolation from InfoHub).
+    // Otherwise fall back to thread-scoped session key (upstream default).
+    const sessionKey = sessionKeyHeader ||
+      (threadId ? `${route.sessionKey}:thread:${threadId.toLowerCase()}` : route.sessionKey);
 
     // Stash client-provided tools so the plugin tool factory can pick them up
     if (Array.isArray(input.tools) && input.tools.length > 0) {
@@ -571,8 +549,6 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
           return false;
         }
 
-        splitRunIfToolFired();
-
         if (!messageStarted) {
           messageStarted = true;
           writeEvent({
@@ -599,8 +575,6 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
         const text = wasClientToolCalled(sessionKey) ? "" : payload.text?.trim();
 
         if (text) {
-          splitRunIfToolFired();
-
           if (!messageStarted) {
             messageStarted = true;
             writeEvent({
@@ -683,7 +657,6 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       clearWriter(sessionKey);
       clearClientToolCalled(sessionKey);
       clearClientToolNames(sessionKey);
-      clearToolFiredInRun(sessionKey);
     }
   };
 }

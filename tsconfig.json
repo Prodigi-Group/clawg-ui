@@ -11,6 +11,6 @@
     "declaration": true,
     "types": ["node"]
   },
-  "include": ["index.ts", "src"],
+  "include": ["index.ts", "src", "examples"],
   "exclude": ["**/*.test.ts"]
 }
