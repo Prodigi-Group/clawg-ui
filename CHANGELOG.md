@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.6.3 (2026-04-07)
+
+### Added
+- **A2UI v0.9 support** — detect `{ "a2ui_operations": [...] }` in server-side tool results and emit `ACTIVITY_SNAPSHOT` events over the AG-UI SSE stream. CopilotKit clients with A2UI rendering enabled will display rich interactive surfaces (cards, lists, forms) instead of raw JSON.
+- **`cron_report` example tool** (`examples/cron-report-tool.ts`) — server-side tool that wraps cron job run data in a fixed A2UI v0.9 card layout (horizontal scrollable list of cards with startedAt, duration, model, tokensUsed, summary). Registered as `optional: true` — agents must opt in via `tools.alsoAllow: ["cron_report"]`.
+- **Example setup guide** (`examples/SETUP.md`) — step-by-step instructions for configuring a dedicated cron report demo agent with `X-OpenClaw-Agent-Id` header routing.
+- New `src/a2ui.ts` module with detection utilities: `tryParseA2UIOperations`, `extractToolResultText`, `groupBySurface`, `getOperationSurfaceId`.
+
+### Fixed
+- **CopilotKit compatibility: single-run event stream** — removed `splitRunIfToolFired()` which split tool calls and text into separate AG-UI runs. CopilotKit closes the SSE connection on `RUN_FINISHED`, so the second run's text was never received. The entire agent turn (tool calls + follow-up text) now stays in a single `RUN_STARTED`/`RUN_FINISHED` pair.
+- **`TOOL_CALL_RESULT` content** — was always emitted as `content: ""`. Now populated with the actual tool result text extracted from the OpenClaw `tool_result_persist` hook event.
+- **`messageId` collision** — `TOOL_CALL_RESULT` and `TEXT_MESSAGE_START` shared the same `messageId`, causing CopilotKit to overwrite the tool result with the text message. Tool results now use a dedicated `messageId` (`msg-tool-<toolCallId>`), while text messages keep `msg-<uuid>`.
+- **HTTP route registration** — restored the proven v0.5.4 pattern (`registerPluginHttpRoute` via `openclaw/plugin-sdk/plugin-runtime`) after the `gateway_start` hook approach (0.6.1) caused 404s on deployed servers.
+
+### Changed
+- Examples are excluded from the npm package (`!dist/examples` in `files`). The `cron_report` tool loads via dynamic import with a silent `.catch()` fallback — safe for npm installs where `examples/` doesn't exist.
+
+## 0.5.4 (2026-04-02)
+
+### Fixed
+- Use `registerPluginHttpRoute()` from `openclaw/plugin-sdk/plugin-runtime` (dynamic import) to write directly to the pinned HTTP route registry. This is the correct fix for the startup timing issue — `api.registerHttpRoute()` writes to the loader's private registry which the HTTP handler never reads, regardless of when it's called.
+
+## 0.5.3 (2026-04-02) [yanked]
+
+### Fixed
+- Attempted `gateway_start` hook approach — `api.registerHttpRoute()` still writes to the wrong registry even when called post-startup. Use 0.5.4 instead.
+
+## 0.5.2 (2026-04-02) [yanked]
+
+### Fixed
+- Attempted to use `registerPluginHttpRoute()` from the plugin SDK — not exported in the public SDK. Use 0.5.3 instead.
+
+## 0.5.1 (2026-04-01)
+
+### Fixed
+- Add `match: "exact"` to `registerHttpRoute` call — required by OpenClaw 2026.3.23+ which changed the plugin HTTP route API to require an explicit match mode. Without it, the route registers silently but never matches incoming requests, resulting in a 404. Backwards compatible with older OpenClaw versions (unknown properties are ignored).
+
+## 0.5.0 (2026-04-01)
+
+### Changed
+- **Breaking:** Peer ID now uses the stable device UUID instead of the per-thread ID. This enables identity linking (`session.identityLinks`) so clawg-ui devices can be linked to users across channels, matching how Telegram and Slack connections work.
+- Session keys now include a `:thread:<threadId>` suffix for per-thread session separation (same pattern as Slack thread sessions).
+
+### Migration
+- **Identity linking:** You can now add clawg-ui device IDs to `session.identityLinks` in `openclaw.json`:
+  ```json
+  {
+    "session": {
+      "dmScope": "per-peer",
+      "identityLinks": {
+        "alice": ["clawg-ui:<deviceId>", "telegram:123456", "slack:U0123ABC"]
+      }
+    }
+  }
+  ```
+  The device UUID is shown during pairing approval (`openclaw pairing list clawg-ui`).
+- **Session history:** Existing session histories are keyed on the old format (`clawg-ui-<threadId>` peer). After upgrading, devices will start new sessions. No data is lost — old sessions remain in the store but won't be matched by the new key format.
+
 ## 0.4.5 (2026-03-15)
 
 ### Added
