@@ -22,12 +22,15 @@ export function resolveGatewaySecret(api: OpenClawPluginApi): string | null {
 /**
  * Resolve the trusted token that bypasses the pairing ceremony.
  *
- * When `CLAWG_UI_TRUSTED_TOKEN` is set, requests presenting that token as a
- * Bearer credential are accepted without going through device pairing. This
- * allows the InfoHub platform (and other trusted back-ends) to call /v1/clawg-ui
- * directly using the gateway token — no `openclaw pairing approve` required.
+ * When `CLAWG_UI_TRUSTED_TOKEN` is set, requests presenting that Bearer token
+ * are accepted without device pairing. Falls back to `OPENCLAW_GATEWAY_TOKEN`
+ * so that InfoHub can use its gateway token directly without a separate secret.
  */
 export function resolveTrustedToken(): string | null {
-  const token = process.env.CLAWG_UI_TRUSTED_TOKEN;
-  return typeof token === "string" && token ? token : null;
+  // Prefer explicit CLAWG_UI_TRUSTED_TOKEN; fall back to OPENCLAW_GATEWAY_TOKEN
+  // so the gateway token doubles as the trusted token when no separate value is set.
+  const token = process.env.CLAWG_UI_TRUSTED_TOKEN ?? process.env.OPENCLAW_GATEWAY_TOKEN;
+  const resolved = typeof token === "string" && token ? token : null;
+  console.log(`[clawg-ui] trusted-token: ${resolved ? `configured (${resolved.length} chars)` : "not configured — trusted bypass disabled"}`);
+  return resolved;
 }

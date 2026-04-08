@@ -280,8 +280,10 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     if (trustedToken !== null &&
         bearerToken.length === trustedToken.length &&
         timingSafeEqual(Buffer.from(bearerToken), Buffer.from(trustedToken))) {
+      console.log("[clawg-ui] auth: trusted-token match — bypassing pairing");
       deviceId = "trusted-gateway";
     } else {
+      console.log(`[clawg-ui] auth: trusted-token ${trustedToken === null ? "not configured" : `length mismatch (bearer=${bearerToken.length} trusted=${trustedToken.length})`} — falling back to device token flow`);
       // Device token flow: verify HMAC signature, extract device ID
       const extractedDeviceId = verifyDeviceToken(bearerToken, gatewaySecret);
       if (!extractedDeviceId) {
