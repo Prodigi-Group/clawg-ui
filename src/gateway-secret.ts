@@ -18,3 +18,16 @@ export function resolveGatewaySecret(api: OpenClawPluginApi): string | null {
   }
   return null;
 }
+
+/**
+ * Resolve the trusted token that bypasses the pairing ceremony.
+ *
+ * When `CLAWG_UI_TRUSTED_TOKEN` is set, requests presenting that token as a
+ * Bearer credential are accepted without going through device pairing. This
+ * allows the InfoHub platform (and other trusted back-ends) to call /v1/clawg-ui
+ * directly using the gateway token — no `openclaw pairing approve` required.
+ */
+export function resolveTrustedToken(): string | null {
+  const token = process.env.CLAWG_UI_TRUSTED_TOKEN;
+  return typeof token === "string" && token ? token : null;
+}

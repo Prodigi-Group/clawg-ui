@@ -14,7 +14,7 @@ import {
   clearClientToolNames,
 } from "./tool-store.js";
 import { aguiChannelPlugin } from "./channel.js";
-import { resolveGatewaySecret } from "./gateway-secret.js";
+import { resolveGatewaySecret, resolveTrustedToken } from "./gateway-secret.js";
 
 // ---------------------------------------------------------------------------
 // Lightweight HTTP helpers (no internal imports needed)
@@ -202,6 +202,7 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
 
   // Resolve once at init so the per-request handler never touches env vars.
   const gatewaySecret = resolveGatewaySecret(api);
+  const trustedToken = resolveTrustedToken();
 
   return async function handleAguiRequest(
     req: IncomingMessage,
@@ -271,33 +272,44 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       return;
     }
 
-    // Device token flow: verify HMAC signature, extract device ID
-    const extractedDeviceId = verifyDeviceToken(bearerToken, gatewaySecret);
-    if (!extractedDeviceId) {
-      sendUnauthorized(res);
-      return;
-    }
-    deviceId = extractedDeviceId;
-
     // ---------------------------------------------------------------------------
-    // Pairing check: verify device is approved
+    // Trusted token bypass: skip pairing entirely for pre-authorised back-ends.
+    // When CLAWG_UI_TRUSTED_TOKEN is set in the environment, a request carrying
+    // that exact Bearer token is accepted without device registration or approval.
     // ---------------------------------------------------------------------------
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK types lag behind runtime; object form required in 2026.3.7+
-    const storeAllowFrom = await (runtime.channel.pairing.readAllowFromStore as (arg: any) => Promise<string[]>)({ channel: "clawg-ui" })
-      .catch(() => []);
-    const normalizedAllowFrom = storeAllowFrom.map((e) =>
-      e.replace(/^clawg-ui:/i, "").toLowerCase(),
-    );
-    const allowed = normalizedAllowFrom.includes(deviceId.toLowerCase());
+    if (trustedToken !== null &&
+        bearerToken.length === trustedToken.length &&
+        timingSafeEqual(Buffer.from(bearerToken), Buffer.from(trustedToken))) {
+      deviceId = "trusted-gateway";
+    } else {
+      // Device token flow: verify HMAC signature, extract device ID
+      const extractedDeviceId = verifyDeviceToken(bearerToken, gatewaySecret);
+      if (!extractedDeviceId) {
+        sendUnauthorized(res);
+        return;
+      }
+      deviceId = extractedDeviceId;
 
-    if (!allowed) {
-      sendJson(res, 403, {
-        error: {
-          type: "pairing_pending",
-          message: "Device pending approval. Ask the owner to approve using the pairing code from your initial pairing response.",
-        },
-      });
-      return;
+      // ---------------------------------------------------------------------------
+      // Pairing check: verify device is approved
+      // ---------------------------------------------------------------------------
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK types lag behind runtime; object form required in 2026.3.7+
+      const storeAllowFrom = await (runtime.channel.pairing.readAllowFromStore as (arg: any) => Promise<string[]>)({ channel: "clawg-ui" })
+        .catch(() => []);
+      const normalizedAllowFrom = storeAllowFrom.map((e) =>
+        e.replace(/^clawg-ui:/i, "").toLowerCase(),
+      );
+      const allowed = normalizedAllowFrom.includes(deviceId.toLowerCase());
+
+      if (!allowed) {
+        sendJson(res, 403, {
+          error: {
+            type: "pairing_pending",
+            message: "Device pending approval. Ask the owner to approve using the pairing code from your initial pairing response.",
+          },
+        });
+        return;
+      }
     }
 
     // ---------------------------------------------------------------------------
