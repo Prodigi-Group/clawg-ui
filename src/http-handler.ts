@@ -122,6 +122,24 @@ function extractTextContent(msg: Message): string {
   if (typeof msg.content === "string") {
     return msg.content;
   }
+  // Multimodal content array: extract text parts, note image presence
+  if (Array.isArray(msg.content)) {
+    const textParts: string[] = [];
+    let imageCount = 0;
+    for (const part of msg.content) {
+      if (part && typeof part === "object" && "type" in part) {
+        if (part.type === "text" && "text" in part && typeof part.text === "string") {
+          textParts.push(part.text);
+        } else if (part.type === "image" || part.type === "binary") {
+          imageCount++;
+        }
+      }
+    }
+    if (imageCount > 0) {
+      textParts.push(`[${imageCount} image(s) attached]`);
+    }
+    return textParts.join("\n");
+  }
   return "";
 }
 
@@ -321,7 +339,7 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     // Parse body
     let body: unknown;
     try {
-      body = await readJsonBody(req, 1024 * 1024);
+      body = await readJsonBody(req, 20 * 1024 * 1024); // 20MB to support image attachments
     } catch (err) {
       sendJson(res, 400, {
         error: { message: String(err), type: "invalid_request_error" },
