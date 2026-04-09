@@ -1,5 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { EventType } from "@ag-ui/core";
 import type { RunAgentInput, Message } from "@ag-ui/core";
 import { EventEncoder } from "@ag-ui/encoder";
@@ -112,6 +115,53 @@ function verifyDeviceToken(token: string, secret: string): string | null {
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Extract and save images from multimodal AG-UI messages
+// ---------------------------------------------------------------------------
+
+interface ExtractedImage {
+  path: string;
+  contentType: string;
+}
+
+async function extractAndSaveImages(messages: Message[]): Promise<ExtractedImage[]> {
+  const images: ExtractedImage[] = [];
+  for (const msg of messages) {
+    if (msg.role !== "user" || !Array.isArray(msg.content)) continue;
+    for (const part of msg.content) {
+      if (!part || typeof part !== "object" || !("type" in part)) continue;
+      if (part.type === "image" && "source" in part) {
+        const source = part.source as { type?: string; value?: string; mimeType?: string };
+        if ((source.type === "data" || source.type === "base64") && source.value) {
+          try {
+            const ext = (source.mimeType ?? "image/png").split("/")[1] || "png";
+            const filePath = path.join(os.tmpdir(), `clawg-ui-${randomUUID()}.${ext}`);
+            await fs.writeFile(filePath, Buffer.from(source.value, "base64"));
+            images.push({ path: filePath, contentType: source.mimeType ?? "image/png" });
+            console.log(`[clawg-ui] Saved image attachment: ${filePath} (${source.mimeType})`);
+          } catch (err) {
+            console.error(`[clawg-ui] Failed to save image attachment:`, err);
+          }
+        }
+      } else if (part.type === "binary" && "data" in part) {
+        const binary = part as { data?: string; mimeType?: string };
+        if (binary.data && (binary.mimeType ?? "").startsWith("image/")) {
+          try {
+            const ext = (binary.mimeType ?? "image/png").split("/")[1] || "png";
+            const filePath = path.join(os.tmpdir(), `clawg-ui-${randomUUID()}.${ext}`);
+            await fs.writeFile(filePath, Buffer.from(binary.data, "base64"));
+            images.push({ path: filePath, contentType: binary.mimeType ?? "image/png" });
+            console.log(`[clawg-ui] Saved binary image attachment: ${filePath} (${binary.mimeType})`);
+          } catch (err) {
+            console.error(`[clawg-ui] Failed to save binary attachment:`, err);
+          }
+        }
+      }
+    }
+  }
+  return images;
 }
 
 // ---------------------------------------------------------------------------
@@ -478,6 +528,25 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       runId,
     });
 
+    // Extract and save images from multimodal content arrays.
+    // Writes base64 image data to temp files and builds MediaPath/MediaUrl payload
+    // (same pattern as msteams channel) so OpenClaw's agent runner can inject them
+    // into LLM requests for vision-capable models.
+    const extractedImages = await extractAndSaveImages(messages);
+    const mediaPayload: Record<string, unknown> = {};
+    if (extractedImages.length > 0) {
+      const first = extractedImages[0];
+      mediaPayload.MediaPath = first.path;
+      mediaPayload.MediaType = first.contentType;
+      mediaPayload.MediaUrl = first.path;
+      if (extractedImages.length > 1) {
+        mediaPayload.MediaPaths = extractedImages.map((img) => img.path);
+        mediaPayload.MediaUrls = extractedImages.map((img) => img.path);
+        mediaPayload.MediaTypes = extractedImages.map((img) => img.contentType);
+      }
+      console.log(`[clawg-ui] Extracted ${extractedImages.length} image(s) for MediaPath injection`);
+    }
+
     // Build inbound context using the plugin runtime (same pattern as msteams)
     // Header-based session key takes priority (enables per-user isolation from InfoHub).
     // Otherwise fall back to thread-scoped session key (upstream default).
@@ -539,6 +608,7 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       WasMentioned: true,
       CommandAuthorized: true,
       OriginatingChannel: "clawg-ui" as const,
+      ...mediaPayload,
     });
 
     // Record inbound session
