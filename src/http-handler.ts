@@ -132,28 +132,36 @@ async function extractAndSaveImages(messages: Message[]): Promise<ExtractedImage
     if (msg.role !== "user" || !Array.isArray(msg.content)) continue;
     for (const part of msg.content) {
       if (!part || typeof part !== "object" || !("type" in part)) continue;
-      if (part.type === "image" && "source" in part) {
-        const source = part.source as { type?: string; value?: string; mimeType?: string };
-        if ((source.type === "data" || source.type === "base64") && source.value) {
+      // CopilotKit AG-UI v0.0.52 sends type:"image" with source:{type:"data",value:"base64...",mimeType:"..."}
+      // The AG-UI TS types may not include "image" yet, so use untyped access.
+      const p = part as Record<string, unknown>;
+      const partType = p.type as string;
+      if (partType === "image" && p.source && typeof p.source === "object") {
+        const source = p.source as Record<string, unknown>;
+        const srcType = source.type as string | undefined;
+        const value = source.value as string | undefined;
+        const mimeType = (source.mimeType as string) ?? "image/png";
+        if ((srcType === "data" || srcType === "base64") && value) {
           try {
-            const ext = (source.mimeType ?? "image/png").split("/")[1] || "png";
+            const ext = mimeType.split("/")[1] || "png";
             const filePath = path.join(os.tmpdir(), `clawg-ui-${randomUUID()}.${ext}`);
-            await fs.writeFile(filePath, Buffer.from(source.value, "base64"));
-            images.push({ path: filePath, contentType: source.mimeType ?? "image/png" });
-            console.log(`[clawg-ui] Saved image attachment: ${filePath} (${source.mimeType})`);
+            await fs.writeFile(filePath, Buffer.from(value, "base64"));
+            images.push({ path: filePath, contentType: mimeType });
+            console.log(`[clawg-ui] Saved image attachment: ${filePath} (${mimeType})`);
           } catch (err) {
             console.error(`[clawg-ui] Failed to save image attachment:`, err);
           }
         }
-      } else if (part.type === "binary" && "data" in part) {
-        const binary = part as { data?: string; mimeType?: string };
-        if (binary.data && (binary.mimeType ?? "").startsWith("image/")) {
+      } else if (partType === "binary") {
+        const data = p.data as string | undefined;
+        const mimeType = (p.mimeType as string) ?? "application/octet-stream";
+        if (data && mimeType.startsWith("image/")) {
           try {
-            const ext = (binary.mimeType ?? "image/png").split("/")[1] || "png";
+            const ext = mimeType.split("/")[1] || "png";
             const filePath = path.join(os.tmpdir(), `clawg-ui-${randomUUID()}.${ext}`);
-            await fs.writeFile(filePath, Buffer.from(binary.data, "base64"));
-            images.push({ path: filePath, contentType: binary.mimeType ?? "image/png" });
-            console.log(`[clawg-ui] Saved binary image attachment: ${filePath} (${binary.mimeType})`);
+            await fs.writeFile(filePath, Buffer.from(data, "base64"));
+            images.push({ path: filePath, contentType: mimeType });
+            console.log(`[clawg-ui] Saved binary image attachment: ${filePath} (${mimeType})`);
           } catch (err) {
             console.error(`[clawg-ui] Failed to save binary attachment:`, err);
           }
@@ -177,12 +185,12 @@ function extractTextContent(msg: Message): string {
     const textParts: string[] = [];
     let imageCount = 0;
     for (const part of msg.content) {
-      if (part && typeof part === "object" && "type" in part) {
-        if (part.type === "text" && "text" in part && typeof part.text === "string") {
-          textParts.push(part.text);
-        } else if (part.type === "image" || part.type === "binary") {
-          imageCount++;
-        }
+      if (!part || typeof part !== "object" || !("type" in part)) continue;
+      const p = part as Record<string, unknown>;
+      if (p.type === "text" && typeof p.text === "string") {
+        textParts.push(p.text);
+      } else if (p.type === "image" || p.type === "binary") {
+        imageCount++;
       }
     }
     if (imageCount > 0) {
