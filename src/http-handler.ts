@@ -236,6 +236,7 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       // Add to pending via OpenClaw pairing API - returns a pairing code for approval
       const { code: pairingCode } = await runtime.channel.pairing.upsertPairingRequest({
         channel: "clawg-ui",
+        accountId: "default",
         id: deviceId,
         pairingAdapter: aguiChannelPlugin.pairing,
       });
@@ -381,7 +382,7 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
     const route = runtime.channel.routing.resolveAgentRoute({
       cfg,
       channel: "clawg-ui",
-      peer: { kind: "dm", id: deviceId },
+      peer: { kind: "direct", id: deviceId },
       accountId: agentIdHeader,
     });
 
@@ -572,6 +573,8 @@ export function createAguiHttpHandler(api: OpenClawPluginApi) {
       },
       waitForIdle: () => Promise.resolve(),
       getQueuedCounts: () => ({ tool: 0, block: 0, final: 0 }),
+      getFailedCounts: () => ({ tool: 0, block: 0, final: 0 }),
+      markComplete: () => {},
     };
 
     // Dispatch the inbound message — this triggers the agent run
