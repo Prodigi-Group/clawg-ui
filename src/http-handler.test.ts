@@ -596,7 +596,7 @@ describe("AG-UI HTTP handler", () => {
     expect(rt.channel.routing.resolveAgentRoute).toHaveBeenCalledWith(
       expect.objectContaining({
         channel: "clawg-ui",
-        peer: { kind: "dm", id: APPROVED_DEVICE_ID },
+        peer: { kind: "direct", id: APPROVED_DEVICE_ID },
       }),
     );
   });
