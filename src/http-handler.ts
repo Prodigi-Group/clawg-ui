@@ -776,16 +776,17 @@ async function dispatchAuthenticatedAguiRequest(
     }
 
     // Extract user email for task creation and skill script access.
-    // Write to a well-known file so skill scripts can read the authoritative
-    // email without relying on Clara to pass it (she may read it from doc content).
+    // Write to a per-session directory so concurrent users never cross-contaminate.
+    // Scripts receive --session-key and read from /tmp/openclaw/{sessionKey}/user-email.txt.
     const userEmailHeader =
       typeof req.headers["x-user-email"] === "string"
         ? req.headers["x-user-email"]
         : undefined;
-    if (userEmailHeader) {
-      await ensureOpenClawTmpDir();
+    if (userEmailHeader && userKey) {
+      const sessionDir = path.join(OPENCLAW_TMP_DIR, userKey);
+      await fs.mkdir(sessionDir, { recursive: true }).catch(() => {});
       await fs.writeFile(
-        path.join(OPENCLAW_TMP_DIR, "user-email.txt"),
+        path.join(sessionDir, "user-email.txt"),
         userEmailHeader.toLowerCase().trim(),
         "utf8",
       ).catch(() => {});
