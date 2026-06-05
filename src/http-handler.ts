@@ -775,11 +775,21 @@ async function dispatchAuthenticatedAguiRequest(
       userKey = validated;
     }
 
-    // Extract user email for task creation
+    // Extract user email for task creation and skill script access.
+    // Write to a well-known file so skill scripts can read the authoritative
+    // email without relying on Clara to pass it (she may read it from doc content).
     const userEmailHeader =
       typeof req.headers["x-user-email"] === "string"
         ? req.headers["x-user-email"]
         : undefined;
+    if (userEmailHeader) {
+      await ensureOpenClawTmpDir();
+      await fs.writeFile(
+        path.join(OPENCLAW_TMP_DIR, "user-email.txt"),
+        userEmailHeader.toLowerCase().trim(),
+        "utf8",
+      ).catch(() => {});
+    }
     const route = runtime.channel.routing.resolveAgentRoute({
       cfg,
       channel: "clawg-ui",
