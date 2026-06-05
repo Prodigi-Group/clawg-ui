@@ -851,25 +851,6 @@ async function dispatchAuthenticatedAguiRequest(
       runId,
     });
 
-    // Extract and save images from multimodal content arrays.
-    // Writes base64 image data to temp files and builds MediaPath/MediaUrl payload
-    // (same pattern as msteams channel) so OpenClaw's agent runner can inject them
-    // into LLM requests for vision-capable models.
-    const extractedImages = await extractAndSaveImages(messages);
-    const mediaPayload: Record<string, unknown> = {};
-    if (extractedImages.length > 0) {
-      const first = extractedImages[0];
-      mediaPayload.MediaPath = first.path;
-      mediaPayload.MediaType = first.contentType;
-      mediaPayload.MediaUrl = first.path;
-      if (extractedImages.length > 1) {
-        mediaPayload.MediaPaths = extractedImages.map((img) => img.path);
-        mediaPayload.MediaUrls = extractedImages.map((img) => img.path);
-        mediaPayload.MediaTypes = extractedImages.map((img) => img.contentType);
-      }
-      console.log(`[clawg-ui] Extracted ${extractedImages.length} image(s) for MediaPath injection`);
-    }
-
     // Build inbound context using the plugin runtime (same pattern as msteams).
     // Compose session scopes under route.sessionKey — the :user: suffix (from
     // the validated header) and the :thread: suffix both subdivide the route
