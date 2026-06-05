@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { EventType } from "@ag-ui/core";
 import type { RunAgentInput, Message } from "@ag-ui/core";
@@ -230,13 +229,23 @@ function parseBase64DataUri(uri: string): { mimeType: string; data: string } | n
   return { mimeType: match[1], data: match[2] };
 }
 
+// OpenClaw's designated secure temp dir — always in the allowed media roots list.
+// Files saved here are accessible to OpenClaw's built-in tools (pdf, image, etc.)
+// without requiring dynamic root expansion.
+const OPENCLAW_TMP_DIR = "/tmp/openclaw";
+
+async function ensureOpenClawTmpDir(): Promise<void> {
+  await fs.mkdir(OPENCLAW_TMP_DIR, { recursive: true });
+}
+
 async function writeAttachmentFile(
   base64: string,
   mimeType: string,
 ): Promise<string | null> {
   try {
+    await ensureOpenClawTmpDir();
     const ext = mimeToExtension(mimeType);
-    const filePath = path.join(os.tmpdir(), `clawg-ui-${randomUUID()}.${ext}`);
+    const filePath = path.join(OPENCLAW_TMP_DIR, `clawg-ui-${randomUUID()}.${ext}`);
     await fs.writeFile(filePath, Buffer.from(base64, "base64"));
     return filePath;
   } catch (err) {
