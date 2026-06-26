@@ -827,6 +827,11 @@ async function dispatchAuthenticatedAguiRequest(
     // Reasoning state
     let reasoningMessageId: string | null = null;
     let reasoningStarted = false;
+    // OpenClaw's onReasoningStream delivers the FULL accumulated reasoning text on every tick.
+    // AG-UI REASONING_MESSAGE_CONTENT.delta is incremental (the client appends), so we must emit
+    // only the new suffix — tracking what's already been emitted here. Emitting `text` verbatim
+    // makes clients concatenate snapshots and duplicate the reasoning.
+    let reasoningEmitted = "";
 
     // Step reporting state
     const activeSteps = new Set<string>();
@@ -844,6 +849,7 @@ async function dispatchAuthenticatedAguiRequest(
         });
         reasoningStarted = false;
         reasoningMessageId = null;
+        reasoningEmitted = "";
       }
     };
 
@@ -1076,6 +1082,7 @@ async function dispatchAuthenticatedAguiRequest(
 
                   if (!reasoningStarted) {
                     reasoningStarted = true;
+                    reasoningEmitted = "";
                     reasoningMessageId = `reason-${randomUUID()}`;
                     writeEvent({
                       type: EventType.REASONING_START,
@@ -1087,10 +1094,18 @@ async function dispatchAuthenticatedAguiRequest(
                       role: "reasoning",
                     });
                   }
+                  // Emit only the new slice. `text` is cumulative; normally it extends what we've
+                  // already sent, so the delta is the suffix. If it ever doesn't (unexpected reset),
+                  // fall back to sending the whole thing.
+                  const delta = text.startsWith(reasoningEmitted)
+                    ? text.slice(reasoningEmitted.length)
+                    : text;
+                  reasoningEmitted = text;
+                  if (!delta) return;
                   writeEvent({
                     type: EventType.REASONING_MESSAGE_CONTENT,
                     messageId: reasoningMessageId,
-                    delta: text,
+                    delta,
                   });
                 },
                 onReasoningEnd: () => {
@@ -1105,6 +1120,7 @@ async function dispatchAuthenticatedAguiRequest(
                   });
                   reasoningStarted = false;
                   reasoningMessageId = null;
+                  reasoningEmitted = "";
                 },
               }
             : {}),
