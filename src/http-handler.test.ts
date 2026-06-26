@@ -575,6 +575,47 @@ describe("AG-UI HTTP handler", () => {
     expect(types).toContain(EventType.RUN_FINISHED);
   });
 
+  it("emits incremental deltas when onReasoningStream delivers cumulative text", async () => {
+    const rt = (fakeApi as any).runtime;
+    rt.channel.reply.dispatchReplyFromConfig.mockImplementation(
+      async ({ dispatcher, replyOptions }: { dispatcher: any; replyOptions: any }) => {
+        // OpenClaw delivers the FULL accumulated reasoning text on each tick (cumulative),
+        // not just the new chunk — each call extends the previous text.
+        replyOptions.onReasoningStream({ text: "Let me think" });
+        replyOptions.onReasoningStream({ text: "Let me think about it" });
+        replyOptions.onReasoningStream({ text: "Let me think about it carefully." });
+        replyOptions.onReasoningEnd();
+        dispatcher.sendFinalReply({ text: "Done." });
+        return { queuedFinal: true, counts: { tool: 0, block: 0, final: 1 } };
+      },
+    );
+
+    const token = createDeviceToken(GATEWAY_SECRET, APPROVED_DEVICE_ID);
+    const req = createReq({
+      headers: { authorization: `Bearer ${token}` },
+      body: {
+        threadId: "t-reason-cumulative",
+        runId: "r-reason-cumulative",
+        messages: [{ role: "user", content: "Think carefully" }],
+      },
+    });
+    const res = createRes();
+    await handler(req, res);
+
+    const events = parseEvents(res._chunks);
+    const reasonContent = events.filter((e) => e.type === EventType.REASONING_MESSAGE_CONTENT);
+
+    // Each delta must be ONLY the new slice, not the whole cumulative buffer. Concatenating
+    // them reconstructs the final reasoning exactly once (the bug emitted full snapshots, so
+    // clients appending deltas duplicated the text).
+    expect(reasonContent.map((e) => e.delta)).toEqual([
+      "Let me think",
+      " about it",
+      " carefully.",
+    ]);
+    expect(reasonContent.map((e) => e.delta).join("")).toBe("Let me think about it carefully.");
+  });
+
   it("does not emit REASONING events when no reasoning stream fires", async () => {
     const rt = (fakeApi as any).runtime;
     rt.channel.reply.dispatchReplyFromConfig.mockImplementation(
