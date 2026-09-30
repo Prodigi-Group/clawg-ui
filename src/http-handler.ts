@@ -783,9 +783,7 @@ async function dispatchAuthenticatedAguiRequest(
         ? req.headers["x-user-email"]
         : undefined;
     if (userEmailHeader && userKey) {
-      // Lowercased: OpenClaw lowercases session keys, so the key a skill is given (and looks this
-      // directory up by) is lowercase whatever case the header used.
-      const sessionDir = path.join(OPENCLAW_TMP_DIR, userKey.toLowerCase());
+      const sessionDir = path.join(OPENCLAW_TMP_DIR, userKey);
       await fs.mkdir(sessionDir, { recursive: true }).catch(() => {});
       await fs.writeFile(
         path.join(sessionDir, "user-email.txt"),

@@ -21,8 +21,9 @@ Requires OpenClaw 2026.9 (tested against 2026.9.7).
 - **Client tools with mixed-case session keys** — OpenClaw lowercases session keys
   before passing them to the tool factory and hooks, so tools, writers and client-tool
   flags stashed under a mixed-case `X-OpenClaw-Session-Key` were never found: the model
-  never received the client tools. Every tool-store key is now normalised, and the
-  per-session `user-email.txt` directory is lowercased to match the key skills receive.
+  never received the client tools. Every tool-store key is now normalised. (The
+  per-session `user-email.txt` directory keeps the header's key: skills are handed that
+  value by the proxy, not OpenClaw's lowercased one.)
 
 ## 0.7.0 (2026-04-29)
 
