@@ -1,4 +1,4 @@
-import type { ChannelPlugin } from "openclaw/plugin-sdk";
+import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 
 type ResolvedAguiAccount = {
   accountId: string;

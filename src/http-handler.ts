@@ -5,7 +5,7 @@ import path from "node:path";
 import { EventType } from "@ag-ui/core";
 import type { RunAgentInput, Message } from "@ag-ui/core";
 import { EventEncoder } from "@ag-ui/encoder";
-import type { OpenClawPluginApi, PluginRuntime } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi, PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
 import {
   stashTools,
   setWriter,
@@ -747,7 +747,7 @@ async function dispatchAuthenticatedAguiRequest(
     }
 
     // Resolve agent route
-    const cfg = runtime.config.loadConfig();
+    const cfg = runtime.config.current();
     const agentIdHeader =
       typeof req.headers["x-openclaw-agent-id"] === "string"
         ? req.headers["x-openclaw-agent-id"]
@@ -783,7 +783,9 @@ async function dispatchAuthenticatedAguiRequest(
         ? req.headers["x-user-email"]
         : undefined;
     if (userEmailHeader && userKey) {
-      const sessionDir = path.join(OPENCLAW_TMP_DIR, userKey);
+      // Lowercased: OpenClaw lowercases session keys, so the key a skill is given (and looks this
+      // directory up by) is lowercase whatever case the header used.
+      const sessionDir = path.join(OPENCLAW_TMP_DIR, userKey.toLowerCase());
       await fs.mkdir(sessionDir, { recursive: true }).catch(() => {});
       await fs.writeFile(
         path.join(sessionDir, "user-email.txt"),

@@ -1,4 +1,4 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-runtime";
 
 /**
  * Resolve the gateway HMAC secret from config or environment variables.

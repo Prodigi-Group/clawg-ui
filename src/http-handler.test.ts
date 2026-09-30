@@ -14,7 +14,7 @@ vi.mock("@ag-ui/encoder", () => ({
   })),
 }));
 
-vi.mock("openclaw/plugin-sdk", () => ({
+vi.mock("openclaw/plugin-sdk/plugin-entry", () => ({
   emptyPluginConfigSchema: () => ({}),
 }));
 
@@ -144,7 +144,7 @@ function createFakeApi(
     config: { gateway: { auth: { token: "test-gateway-secret" } } },
     runtime: {
       config: {
-        loadConfig: () => ({
+        current: () => ({
           session: { store: "/tmp/test-sessions" },
         }),
       },

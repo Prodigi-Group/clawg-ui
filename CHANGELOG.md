@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased — OpenClaw 2026.9 support
+
+Requires OpenClaw 2026.9 (tested against 2026.9.7).
+
+### Changed
+- **SDK imports** — the root `openclaw/plugin-sdk` barrel is gone in 2026.9
+  (`ERR_PACKAGE_PATH_NOT_EXPORTED`). `emptyPluginConfigSchema` now comes from
+  `openclaw/plugin-sdk/plugin-entry`; types from `plugin-sdk/plugin-runtime` and
+  `plugin-sdk/channel-core`.
+- **HTTP routes** — `/v1/clawg-ui` and `/v1/clawg-ui/operator` are registered with
+  `api.registerHttpRoute` inside `register()`. 2026.9 no longer exports
+  `registerPluginHttpRoute` from `plugin-sdk/plugin-runtime`, and ties routes to the
+  plugin's registration lifetime.
+- **Config** — `runtime.config.loadConfig()` was removed; use `runtime.config.current()`.
+- **Manifest** — declares `channelConfigs` for the `clawg-ui` channel (with a permissive
+  schema; entries without one are dropped).
+
+### Fixed
+- **Client tools with mixed-case session keys** — OpenClaw lowercases session keys
+  before passing them to the tool factory and hooks, so tools, writers and client-tool
+  flags stashed under a mixed-case `X-OpenClaw-Session-Key` were never found: the model
+  never received the client tools. Every tool-store key is now normalised, and the
+  per-session `user-email.txt` directory is lowercased to match the key skills receive.
+
 ## 0.7.0 (2026-04-29)
 
 ### Added

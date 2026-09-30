@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { EventType } from "@ag-ui/core";
 
-vi.mock("openclaw/plugin-sdk", () => ({
+vi.mock("openclaw/plugin-sdk/plugin-entry", () => ({
   emptyPluginConfigSchema: () => ({}),
 }));
 
