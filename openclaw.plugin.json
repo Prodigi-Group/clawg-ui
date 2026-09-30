@@ -1,9 +1,21 @@
 {
   "id": "clawg-ui",
-  "channels": ["clawg-ui"],
+  "channels": [
+    "clawg-ui"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "channelConfigs": {
+    "clawg-ui": {
+      "label": "AG-UI",
+      "description": "AG-UI protocol endpoint for CopilotKit and HttpAgent clients.",
+      "schema": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
   }
 }

@@ -9,6 +9,11 @@ export type EventWriter = (event: { type: EventType } & Record<string, unknown>)
  *
  * Fully reentrant — concurrent requests use different session keys.
  */
+// OpenClaw lowercases session keys before passing them to plugins (tool factory ctx, hook ctx),
+// but the HTTP handler stores state under the key it resolved itself. Every map below is keyed
+// through this so both sides meet whatever case the key arrives in.
+const key = (sessionKey: string): string => sessionKey.toLowerCase();
+
 const toolStore = new Map<string, Tool[]>();
 const writerStore = new Map<string, EventWriter>();
 
@@ -19,13 +24,13 @@ export function stashTools(sessionKey: string, tools: Tool[]): void {
   for (const t of tools) {
     console.log(`[clawg-ui]   tool: name=${t.name}, description=${t.description ?? "(none)"}, hasParams=${!!t.parameters}, params=${JSON.stringify(t.parameters ?? {})}`);
   }
-  toolStore.set(sessionKey, tools);
+  toolStore.set(key(sessionKey), tools);
 }
 
 export function popTools(sessionKey: string): Tool[] {
-  const tools = toolStore.get(sessionKey) ?? [];
+  const tools = toolStore.get(key(sessionKey)) ?? [];
   console.log(`[clawg-ui] popTools: sessionKey=${sessionKey}, tools=${tools.length}`);
-  toolStore.delete(sessionKey);
+  toolStore.delete(key(sessionKey));
   return tools;
 }
 
@@ -38,21 +43,21 @@ export function setWriter(
   writer: EventWriter,
   messageId: string,
 ): void {
-  writerStore.set(sessionKey, writer);
-  messageIdStore.set(sessionKey, messageId);
+  writerStore.set(key(sessionKey), writer);
+  messageIdStore.set(key(sessionKey), messageId);
 }
 
 export function getWriter(sessionKey: string): EventWriter | undefined {
-  return writerStore.get(sessionKey);
+  return writerStore.get(key(sessionKey));
 }
 
 export function getMessageId(sessionKey: string): string | undefined {
-  return messageIdStore.get(sessionKey);
+  return messageIdStore.get(key(sessionKey));
 }
 
 export function clearWriter(sessionKey: string): void {
-  writerStore.delete(sessionKey);
-  messageIdStore.delete(sessionKey);
+  writerStore.delete(key(sessionKey));
+  messageIdStore.delete(key(sessionKey));
 }
 
 // --- Pending toolCallId stack (before_tool_call pushes, tool_result_persist pops) ---
@@ -62,21 +67,21 @@ export function clearWriter(sessionKey: string): void {
 const pendingStacks = new Map<string, string[]>();
 
 export function pushToolCallId(sessionKey: string, toolCallId: string): void {
-  let stack = pendingStacks.get(sessionKey);
+  let stack = pendingStacks.get(key(sessionKey));
   if (!stack) {
     stack = [];
-    pendingStacks.set(sessionKey, stack);
+    pendingStacks.set(key(sessionKey), stack);
   }
   stack.push(toolCallId);
   console.log(`[clawg-ui] pushToolCallId: sessionKey=${sessionKey}, toolCallId=${toolCallId}, stackSize=${stack.length}`);
 }
 
 export function popToolCallId(sessionKey: string): string | undefined {
-  const stack = pendingStacks.get(sessionKey);
+  const stack = pendingStacks.get(key(sessionKey));
   const id = stack?.pop();
   console.log(`[clawg-ui] popToolCallId: sessionKey=${sessionKey}, toolCallId=${id ?? "none"}, stackSize=${stack?.length ?? 0}`);
   if (stack && stack.length === 0) {
-    pendingStacks.delete(sessionKey);
+    pendingStacks.delete(key(sessionKey));
   }
   return id;
 }
@@ -91,21 +96,21 @@ export function markClientToolNames(
   names: string[],
 ): void {
   console.log(`[clawg-ui] markClientToolNames: sessionKey=${sessionKey}, names=${names.join(", ")}`);
-  clientToolNames.set(sessionKey, new Set(names));
+  clientToolNames.set(key(sessionKey), new Set(names));
 }
 
 export function isClientTool(
   sessionKey: string,
   toolName: string,
 ): boolean {
-  const result = clientToolNames.get(sessionKey)?.has(toolName) ?? false;
+  const result = clientToolNames.get(key(sessionKey))?.has(toolName) ?? false;
   console.log(`[clawg-ui] isClientTool: sessionKey=${sessionKey}, toolName=${toolName}, result=${result}`);
   return result;
 }
 
 export function clearClientToolNames(sessionKey: string): void {
   console.log(`[clawg-ui] clearClientToolNames: sessionKey=${sessionKey}`);
-  clientToolNames.delete(sessionKey);
+  clientToolNames.delete(key(sessionKey));
 }
 
 // --- Tool-fired-in-run flag ---
@@ -117,15 +122,15 @@ export function clearClientToolNames(sessionKey: string): void {
 const toolFiredInRunFlags = new Map<string, boolean>();
 
 export function setToolFiredInRun(sessionKey: string): void {
-  toolFiredInRunFlags.set(sessionKey, true);
+  toolFiredInRunFlags.set(key(sessionKey), true);
 }
 
 export function wasToolFiredInRun(sessionKey: string): boolean {
-  return toolFiredInRunFlags.get(sessionKey) ?? false;
+  return toolFiredInRunFlags.get(key(sessionKey)) ?? false;
 }
 
 export function clearToolFiredInRun(sessionKey: string): void {
-  toolFiredInRunFlags.delete(sessionKey);
+  toolFiredInRunFlags.delete(key(sessionKey));
 }
 
 // --- Client-tool-called flag ---
@@ -136,17 +141,17 @@ const clientToolCalledFlags = new Map<string, boolean>();
 
 export function setClientToolCalled(sessionKey: string): void {
   console.log(`[clawg-ui] setClientToolCalled: sessionKey=${sessionKey}`);
-  clientToolCalledFlags.set(sessionKey, true);
+  clientToolCalledFlags.set(key(sessionKey), true);
 }
 
 export function wasClientToolCalled(sessionKey: string): boolean {
-  const result = clientToolCalledFlags.get(sessionKey) ?? false;
+  const result = clientToolCalledFlags.get(key(sessionKey)) ?? false;
   console.log(`[clawg-ui] wasClientToolCalled: sessionKey=${sessionKey}, result=${result}`);
   return result;
 }
 
 export function clearClientToolCalled(sessionKey: string): void {
   console.log(`[clawg-ui] clearClientToolCalled: sessionKey=${sessionKey}`);
-  clientToolCalledFlags.delete(sessionKey);
+  clientToolCalledFlags.delete(key(sessionKey));
 }
 

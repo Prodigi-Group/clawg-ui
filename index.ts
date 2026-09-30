@@ -1,6 +1,6 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-runtime";
 import type { Command } from "commander";
-import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk/plugin-entry";
 import { randomUUID } from "node:crypto";
 import { EventType } from "@ag-ui/core";
 import { aguiChannelPlugin } from "./src/channel.js";
@@ -192,33 +192,26 @@ const plugin: {
         // examples/ not available (npm install) — skip
       });
 
-    // Use registerPluginHttpRoute from plugin-runtime which writes directly to
-    // the pinned HTTP route registry. api.registerHttpRoute writes to the
-    // loader's private registry which is not the one the HTTP handler reads.
-    import("openclaw/plugin-sdk/plugin-runtime")
-      .then((mod: any) => {
-        mod.registerPluginHttpRoute({
-          path: "/v1/clawg-ui",
-          auth: "plugin",
-          match: "exact",
-          pluginId: "clawg-ui",
-          handler: createAguiHttpHandler(api),
-        });
-        // Operator-auth AG-UI route — for OpenClaw operator-UI embedded
-        // consumers (plugin-contributed `chat.surface` slot, etc.) that
-        // already hold a gateway token and shouldn't need a second pairing
-        // dance. Gateway validates operator scope before our handler runs.
-        mod.registerPluginHttpRoute({
-          path: "/v1/clawg-ui/operator",
-          auth: "gateway",
-          match: "exact",
-          pluginId: "clawg-ui",
-          handler: createOperatorAguiHttpHandler(api),
-        });
-      })
-      .catch((err: unknown) => {
-        console.error("[clawg-ui] failed to register HTTP routes:", err);
-      });
+    // OpenClaw 2026.9 ties HTTP routes to the plugin's registration lifetime: register them
+    // here, synchronously, through the plugin API. (Earlier versions needed the
+    // plugin-sdk/plugin-runtime registerPluginHttpRoute workaround, because api.registerHttpRoute
+    // wrote to a registry the HTTP server didn't read. 2026.9 no longer exports it there.)
+    api.registerHttpRoute({
+      path: "/v1/clawg-ui",
+      auth: "plugin",
+      match: "exact",
+      handler: createAguiHttpHandler(api),
+    });
+    // Operator-auth AG-UI route — for OpenClaw operator-UI embedded
+    // consumers (plugin-contributed `chat.surface` slot, etc.) that
+    // already hold a gateway token and shouldn't need a second pairing
+    // dance. Gateway validates operator scope before our handler runs.
+    api.registerHttpRoute({
+      path: "/v1/clawg-ui/operator",
+      auth: "gateway",
+      match: "exact",
+      handler: createOperatorAguiHttpHandler(api),
+    });
 
     api.on("before_tool_call", handleBeforeToolCall);
     api.on("tool_result_persist", handleToolResultPersist);

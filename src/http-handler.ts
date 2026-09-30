@@ -5,7 +5,7 @@ import path from "node:path";
 import { EventType } from "@ag-ui/core";
 import type { RunAgentInput, Message } from "@ag-ui/core";
 import { EventEncoder } from "@ag-ui/encoder";
-import type { OpenClawPluginApi, PluginRuntime } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi, PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
 import {
   stashTools,
   setWriter,
@@ -747,7 +747,7 @@ async function dispatchAuthenticatedAguiRequest(
     }
 
     // Resolve agent route
-    const cfg = runtime.config.loadConfig();
+    const cfg = runtime.config.current();
     const agentIdHeader =
       typeof req.headers["x-openclaw-agent-id"] === "string"
         ? req.headers["x-openclaw-agent-id"]
@@ -783,13 +783,18 @@ async function dispatchAuthenticatedAguiRequest(
         ? req.headers["x-user-email"]
         : undefined;
     if (userEmailHeader && userKey) {
-      const sessionDir = path.join(OPENCLAW_TMP_DIR, userKey);
-      await fs.mkdir(sessionDir, { recursive: true }).catch(() => {});
-      await fs.writeFile(
-        path.join(sessionDir, "user-email.txt"),
-        userEmailHeader.toLowerCase().trim(),
-        "utf8",
-      ).catch(() => {});
+      // Under the key as the header sent it (the value the InfoHub proxy hands skills in the User
+      // Context) and, when different, the lowercase key OpenClaw 2026.9 canonicalises session keys
+      // to — so a script finds it whichever of the two it was given.
+      for (const dirKey of new Set([userKey, userKey.toLowerCase()])) {
+        const sessionDir = path.join(OPENCLAW_TMP_DIR, dirKey);
+        await fs.mkdir(sessionDir, { recursive: true }).catch(() => {});
+        await fs.writeFile(
+          path.join(sessionDir, "user-email.txt"),
+          userEmailHeader.toLowerCase().trim(),
+          "utf8",
+        ).catch(() => {});
+      }
     }
     const route = runtime.channel.routing.resolveAgentRoute({
       cfg,
