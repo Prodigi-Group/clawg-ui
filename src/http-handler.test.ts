@@ -1,3 +1,5 @@
+import { readFileSync, rmSync } from "node:fs";
+import path from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EventEmitter } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -896,6 +898,33 @@ describe("AG-UI HTTP handler", () => {
     expect(call.ctx.SessionKey).toBe(
       "agui:test-session:user:alice@example.com:thread:t-user",
     );
+  });
+
+  it("writes user-email.txt under the header's key and its lowercase form", async () => {
+    const token = createDeviceToken(GATEWAY_SECRET, APPROVED_DEVICE_ID);
+    const key = "merchant-PRO-12345";
+    const req = createReq({
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-openclaw-session-key": key,
+        "x-user-email": "Merchant@Example.com",
+      },
+      body: {
+        threadId: "t-email",
+        runId: "r-email",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+    const res = createRes();
+    await handler(req, res);
+
+    for (const dirKey of [key, key.toLowerCase()]) {
+      const file = path.join("/tmp/openclaw", dirKey, "user-email.txt");
+      expect(readFileSync(file, "utf8")).toBe("merchant@example.com");
+    }
+    for (const dirKey of new Set([key, key.toLowerCase()])) {
+      rmSync(path.join("/tmp/openclaw", dirKey), { recursive: true, force: true });
+    }
   });
 
   it("composes user and thread suffixes together in order", async () => {
