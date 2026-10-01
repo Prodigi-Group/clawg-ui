@@ -14,6 +14,8 @@ import {
   wasClientToolCalled,
   clearClientToolCalled,
   clearClientToolNames,
+  setModelOverride,
+  clearModelOverride,
 } from "./tool-store.js";
 import { aguiChannelPlugin } from "./channel.js";
 import { resolveGatewaySecret, resolveTrustedToken } from "./gateway-secret.js";
@@ -233,6 +235,15 @@ function parseBase64DataUri(uri: string): { mimeType: string; data: string } | n
 // Files saved here are accessible to OpenClaw's built-in tools (pdf, image, etc.)
 // without requiring dynamic root expansion.
 const OPENCLAW_TMP_DIR = "/tmp/openclaw";
+
+/** "provider/model", e.g. "anthropic/claude-opus-5-5". */
+const MODEL_REF = /^[a-z0-9][a-z0-9_-]{0,63}\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+/** The X-OpenClaw-Model header if it is a well-formed provider/model ref, else undefined. */
+export function resolveModelOverrideHeader(value: string | string[] | undefined): string | undefined {
+  const v = typeof value === "string" ? value.trim() : undefined;
+  return v && MODEL_REF.test(v) ? v : undefined;
+}
 
 async function ensureOpenClawTmpDir(): Promise<void> {
   await fs.mkdir(OPENCLAW_TMP_DIR, { recursive: true });
@@ -899,6 +910,11 @@ async function dispatchAuthenticatedAguiRequest(
       );
     }
 
+    // Per-run model choice from the trusted proxy (like X-OpenClaw-Session-Key, never from the browser).
+    // Applied by the before_model_resolve hook; anything not shaped like "provider/model" is ignored.
+    const modelOverride = resolveModelOverrideHeader(req.headers["x-openclaw-model"]);
+    setModelOverride(runId, sessionKey, modelOverride);
+
     // Register SSE writer so before/after_tool_call hooks can emit AG-UI events
     setWriter(sessionKey, writeEvent, currentMessageId);
     const storePath = runtime.channel.session.resolveStorePath(cfg.session?.store, {
@@ -1192,6 +1208,7 @@ async function dispatchAuthenticatedAguiRequest(
       clearWriter(sessionKey);
       clearClientToolCalled(sessionKey);
       clearClientToolNames(sessionKey);
+      clearModelOverride(runId);
       await cleanupAttachments(extractedAttachments);
     }
 }

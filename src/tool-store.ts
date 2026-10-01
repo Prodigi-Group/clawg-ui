@@ -155,3 +155,48 @@ export function clearClientToolCalled(sessionKey: string): void {
   clientToolCalledFlags.delete(key(sessionKey));
 }
 
+// --- Per-run model override (X-OpenClaw-Model, from the trusted proxy) ---
+// Read by the before_model_resolve hook, so the proxy can choose the model for a run without a
+// gateway config change. A "provider/model" ref, e.g. "anthropic/claude-opus-5-5".
+//
+// Two layers, so overlapping requests on one conversation (a double send, a message typed while
+// the last is being answered) can't undo each other:
+//  - per run: the request's own choice, looked up by the run id OpenClaw hands the hook, and
+//    cleared when that request ends. No other run can overwrite or clear it.
+//  - per conversation: the latest choice any request sent for that session. OpenClaw may queue a
+//    message that arrives mid-run and run it as a follow-up after its own request has returned;
+//    the follow-up then has no run entry, and uses this instead of falling back to the default.
+//    Only a newer request replaces it (a request without the header resets it to the default);
+//    entries idle for SESSION_MODEL_TTL_MS are dropped.
+
+const runModelOverrides = new Map<string, string>();
+const sessionModelOverrides = new Map<string, { ref: string; at: number }>();
+const SESSION_MODEL_TTL_MS = 60 * 60 * 1000;
+
+/** Record the model a request chose (undefined = the agent's default) for its run and its session. */
+export function setModelOverride(runId: string, sessionKey: string, modelRef: string | undefined, now = Date.now()): void {
+  for (const [k, v] of sessionModelOverrides) {
+    if (now - v.at > SESSION_MODEL_TTL_MS) sessionModelOverrides.delete(k);
+  }
+  if (modelRef) {
+    runModelOverrides.set(runId, modelRef);
+    sessionModelOverrides.set(key(sessionKey), { ref: modelRef, at: now });
+  } else {
+    runModelOverrides.delete(runId);
+    sessionModelOverrides.delete(key(sessionKey));
+  }
+}
+
+/** The run's own choice, else the latest one sent for its session; undefined = the agent's default. */
+export function getModelOverride(runId: string | undefined, sessionKey: string | undefined): string | undefined {
+  if (runId) {
+    const own = runModelOverrides.get(runId);
+    if (own) return own;
+  }
+  return sessionKey ? sessionModelOverrides.get(key(sessionKey))?.ref : undefined;
+}
+
+/** A request ended: drop its run's entry. Its session's latest choice stays for queued follow-ups. */
+export function clearModelOverride(runId: string): void {
+  runModelOverrides.delete(runId);
+}
