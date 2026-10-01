@@ -12,6 +12,7 @@ import { clawgUiToolFactory } from "./src/client-tools.js";
 import {
   getWriter,
   getMessageId,
+  getModelOverride,
   pushToolCallId,
   popToolCallId,
   isClientTool,
@@ -169,6 +170,20 @@ export function handleToolResultPersist(
   }
 }
 
+/**
+ * before_model_resolve: use the model the trusted proxy chose for this run (X-OpenClaw-Model), if any.
+ * Returns nothing otherwise, so the agent's configured model applies.
+ */
+export function handleBeforeModelResolve(
+  _event: unknown,
+  ctx: { sessionKey?: string },
+): { providerOverride: string; modelOverride: string } | undefined {
+  const ref = ctx.sessionKey ? getModelOverride(ctx.sessionKey) : undefined;
+  if (!ref) return undefined;
+  const slash = ref.indexOf("/");
+  return { providerOverride: ref.slice(0, slash), modelOverride: ref.slice(slash + 1) };
+}
+
 const plugin: {
   id: string;
   name: string;
@@ -214,6 +229,7 @@ const plugin: {
     });
 
     api.on("before_tool_call", handleBeforeToolCall);
+    api.on("before_model_resolve", handleBeforeModelResolve);
     api.on("tool_result_persist", handleToolResultPersist);
 
     // CLI commands for device management

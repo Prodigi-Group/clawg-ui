@@ -155,3 +155,20 @@ export function clearClientToolCalled(sessionKey: string): void {
   clientToolCalledFlags.delete(key(sessionKey));
 }
 
+// --- Per-run model override (X-OpenClaw-Model, from the trusted proxy) ---
+// Read by the before_model_resolve hook, so the proxy can choose the model for a run without a
+// gateway config change. A "provider/model" ref, e.g. "anthropic/claude-opus-5-5".
+
+const modelOverrides = new Map<string, string>();
+
+export function setModelOverride(sessionKey: string, modelRef: string): void {
+  modelOverrides.set(key(sessionKey), modelRef);
+}
+
+export function getModelOverride(sessionKey: string): string | undefined {
+  return modelOverrides.get(key(sessionKey));
+}
+
+export function clearModelOverride(sessionKey: string): void {
+  modelOverrides.delete(key(sessionKey));
+}

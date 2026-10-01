@@ -21,6 +21,7 @@ vi.mock("openclaw/plugin-sdk/plugin-entry", () => ({
 }));
 
 import { createAguiHttpHandler } from "./http-handler.js";
+import { getModelOverride } from "./tool-store.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -876,6 +877,28 @@ describe("AG-UI HTTP handler", () => {
   // -------------------------------------------------------------------------
   // X-OpenClaw-Session-Key — per-user session scoping
   // -------------------------------------------------------------------------
+
+  it("applies X-OpenClaw-Model for the run and clears it afterwards", async () => {
+    const token = createDeviceToken(GATEWAY_SECRET, APPROVED_DEVICE_ID);
+    const rt = (fakeApi as any).runtime;
+    let duringRun: string | undefined;
+    rt.channel.reply.dispatchReplyFromConfig.mockImplementationOnce(async ({ ctx }: any) => {
+      duringRun = getModelOverride(ctx.SessionKey);
+      return { queuedFinal: true, counts: { tool: 0, block: 0, final: 1 } };
+    });
+    const req = createReq({
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-openclaw-model": "anthropic/claude-sonnet-4-6",
+      },
+      body: { threadId: "t-model", runId: "r-model", messages: [{ role: "user", content: "Hello" }] },
+    });
+    await handler(req, createRes());
+
+    const sessionKey = rt.channel.reply.dispatchReplyFromConfig.mock.calls[0][0].ctx.SessionKey;
+    expect(duringRun).toBe("anthropic/claude-sonnet-4-6");
+    expect(getModelOverride(sessionKey)).toBeUndefined();
+  });
 
   it("appends user suffix to session key when X-OpenClaw-Session-Key is provided", async () => {
     const token = createDeviceToken(GATEWAY_SECRET, APPROVED_DEVICE_ID);

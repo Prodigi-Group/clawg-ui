@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — per-run model choice
+
+### Added
+- **`X-OpenClaw-Model` header** — the trusted proxy can choose the model for a run as a `provider/model`
+  ref (e.g. `anthropic/claude-opus-5-5`). clawg-ui returns it from OpenClaw's `before_model_resolve`
+  hook, so the model can be switched per request without a gateway config change. Anything not shaped
+  like `provider/model` is ignored, and the choice is cleared when the run ends. The hook is a
+  conversation hook: enable it with `plugins.entries.clawg-ui.hooks.allowConversationAccess: true`.
+
 ## Unreleased — OpenClaw 2026.9 support
 
 Requires OpenClaw 2026.9 (tested against 2026.9.7).
