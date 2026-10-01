@@ -34,22 +34,59 @@ describe("X-OpenClaw-Model header", () => {
 });
 
 describe("before_model_resolve", () => {
-  it("returns the run's model, split into provider and model", () => {
-    const sessionKey = "agent:main:main:user:merchant-PRO-1:thread:t1";
-    setModelOverride(sessionKey, "anthropic/claude-sonnet-4-6");
+  const session = "agent:main:main:user:merchant-PRO-1:thread:t1";
 
-    // OpenClaw hands plugins the lowercased session key.
-    expect(handleBeforeModelResolve({}, { sessionKey: sessionKey.toLowerCase() })).toEqual({
+  it("returns the run's model, split into provider and model", () => {
+    setModelOverride("run-1", session, "anthropic/claude-sonnet-4-6");
+
+    expect(handleBeforeModelResolve({}, { runId: "run-1", sessionKey: session })).toEqual({
       providerOverride: "anthropic",
       modelOverride: "claude-sonnet-4-6",
     });
-
-    clearModelOverride(sessionKey);
-    expect(handleBeforeModelResolve({}, { sessionKey })).toBeUndefined();
+    clearModelOverride("run-1");
   });
 
-  it("leaves the configured model alone without a session or an override", () => {
+  it("keeps overlapping runs apart: each sees its own choice, and one ending leaves the other", () => {
+    setModelOverride("run-a", session, "anthropic/claude-sonnet-4-6");
+    setModelOverride("run-b", session, "anthropic/claude-opus-5-5");
+
+    clearModelOverride("run-b"); // run B's request ends first
+    expect(handleBeforeModelResolve({}, { runId: "run-a", sessionKey: session })?.modelOverride).toBe("claude-sonnet-4-6");
+    clearModelOverride("run-a");
+  });
+
+  it("gives a queued follow-up the session's latest choice after its request has ended", () => {
+    setModelOverride("run-a", session, "anthropic/claude-sonnet-4-6");
+    setModelOverride("run-b", session, "anthropic/claude-haiku-4-5");
+    clearModelOverride("run-b"); // B was queued: its request returned at once
+
+    // OpenClaw runs B's message later, under a run with no entry of its own; session keys arrive lowercased.
+    expect(handleBeforeModelResolve({}, { runId: "follow-up", sessionKey: session.toLowerCase() })?.modelOverride)
+      .toBe("claude-haiku-4-5");
+    clearModelOverride("run-a");
+  });
+
+  it("a request without the header resets its session to the default", () => {
+    setModelOverride("run-1", session, "anthropic/claude-sonnet-4-6");
+    clearModelOverride("run-1");
+    setModelOverride("run-2", session, undefined);
+
+    expect(handleBeforeModelResolve({}, { runId: "run-2", sessionKey: session })).toBeUndefined();
+    expect(handleBeforeModelResolve({}, { runId: "follow-up", sessionKey: session })).toBeUndefined();
+  });
+
+  it("drops a session's choice once it has been idle for an hour", () => {
+    const t0 = 1_000_000;
+    setModelOverride("run-old", "agent:main:main:idle", "anthropic/claude-sonnet-4-6", t0);
+    clearModelOverride("run-old");
+    setModelOverride("run-new", "agent:main:main:other", "anthropic/claude-opus-5-5", t0 + 61 * 60 * 1000);
+
+    expect(handleBeforeModelResolve({}, { sessionKey: "agent:main:main:idle" })).toBeUndefined();
+    clearModelOverride("run-new");
+  });
+
+  it("leaves the configured model alone without an override", () => {
     expect(handleBeforeModelResolve({}, {})).toBeUndefined();
-    expect(handleBeforeModelResolve({}, { sessionKey: "agent:main:main:no-override" })).toBeUndefined();
+    expect(handleBeforeModelResolve({}, { runId: "nothing", sessionKey: "agent:main:main:none" })).toBeUndefined();
   });
 });

@@ -171,14 +171,15 @@ export function handleToolResultPersist(
 }
 
 /**
- * before_model_resolve: use the model the trusted proxy chose for this run (X-OpenClaw-Model), if any.
+ * before_model_resolve: use the model the trusted proxy chose (X-OpenClaw-Model) — this run's own
+ * choice, else the latest one sent for its session (a queued follow-up's request has already ended).
  * Returns nothing otherwise, so the agent's configured model applies.
  */
 export function handleBeforeModelResolve(
   _event: unknown,
-  ctx: { sessionKey?: string },
+  ctx: { runId?: string; sessionKey?: string },
 ): { providerOverride: string; modelOverride: string } | undefined {
-  const ref = ctx.sessionKey ? getModelOverride(ctx.sessionKey) : undefined;
+  const ref = getModelOverride(ctx.runId, ctx.sessionKey);
   if (!ref) return undefined;
   const slash = ref.indexOf("/");
   return { providerOverride: ref.slice(0, slash), modelOverride: ref.slice(slash + 1) };

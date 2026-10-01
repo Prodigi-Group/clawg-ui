@@ -913,8 +913,7 @@ async function dispatchAuthenticatedAguiRequest(
     // Per-run model choice from the trusted proxy (like X-OpenClaw-Session-Key, never from the browser).
     // Applied by the before_model_resolve hook; anything not shaped like "provider/model" is ignored.
     const modelOverride = resolveModelOverrideHeader(req.headers["x-openclaw-model"]);
-    if (modelOverride) setModelOverride(sessionKey, modelOverride);
-    else clearModelOverride(sessionKey);
+    setModelOverride(runId, sessionKey, modelOverride);
 
     // Register SSE writer so before/after_tool_call hooks can emit AG-UI events
     setWriter(sessionKey, writeEvent, currentMessageId);
@@ -1209,7 +1208,7 @@ async function dispatchAuthenticatedAguiRequest(
       clearWriter(sessionKey);
       clearClientToolCalled(sessionKey);
       clearClientToolNames(sessionKey);
-      clearModelOverride(sessionKey);
+      clearModelOverride(runId);
       await cleanupAttachments(extractedAttachments);
     }
 }

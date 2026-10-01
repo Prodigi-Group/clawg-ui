@@ -882,8 +882,8 @@ describe("AG-UI HTTP handler", () => {
     const token = createDeviceToken(GATEWAY_SECRET, APPROVED_DEVICE_ID);
     const rt = (fakeApi as any).runtime;
     let duringRun: string | undefined;
-    rt.channel.reply.dispatchReplyFromConfig.mockImplementationOnce(async ({ ctx }: any) => {
-      duringRun = getModelOverride(ctx.SessionKey);
+    rt.channel.reply.dispatchReplyFromConfig.mockImplementationOnce(async ({ replyOptions }: any) => {
+      duringRun = getModelOverride(replyOptions.runId, undefined);
       return { queuedFinal: true, counts: { tool: 0, block: 0, final: 1 } };
     });
     const req = createReq({
@@ -895,9 +895,10 @@ describe("AG-UI HTTP handler", () => {
     });
     await handler(req, createRes());
 
-    const sessionKey = rt.channel.reply.dispatchReplyFromConfig.mock.calls[0][0].ctx.SessionKey;
+    const runId = rt.channel.reply.dispatchReplyFromConfig.mock.calls[0][0].replyOptions.runId;
+    expect(runId).toBe("r-model");
     expect(duringRun).toBe("anthropic/claude-sonnet-4-6");
-    expect(getModelOverride(sessionKey)).toBeUndefined();
+    expect(getModelOverride(runId, undefined)).toBeUndefined();
   });
 
   it("appends user suffix to session key when X-OpenClaw-Session-Key is provided", async () => {

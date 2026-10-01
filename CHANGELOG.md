@@ -6,8 +6,12 @@
 - **`X-OpenClaw-Model` header** — the trusted proxy can choose the model for a run as a `provider/model`
   ref (e.g. `anthropic/claude-opus-5-5`). clawg-ui returns it from OpenClaw's `before_model_resolve`
   hook, so the model can be switched per request without a gateway config change. Anything not shaped
-  like `provider/model` is ignored, and the choice is cleared when the run ends. The hook is a
-  conversation hook: enable it with `plugins.entries.clawg-ui.hooks.allowConversationAccess: true`.
+  like `provider/model` is ignored. The choice is kept per run (cleared when its request ends, never
+  touched by another run) and as the latest choice for its conversation, which a message OpenClaw
+  queues mid-run uses when it runs as a follow-up after its own request has returned; a request
+  without the header resets that to the agent's default, and idle entries expire after an hour.
+  The hook is a conversation hook: enable it with
+  `plugins.entries.clawg-ui.hooks.allowConversationAccess: true`.
 
 ## Unreleased — OpenClaw 2026.9 support
 
