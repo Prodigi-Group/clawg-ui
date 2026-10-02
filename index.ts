@@ -15,11 +15,13 @@ import {
   getModelOverride,
   getRunSession,
   recordModelCall,
+  recordRunUsage,
   pushToolCallId,
   popToolCallId,
   isClientTool,
   setClientToolCalled,
   type ModelCallUsage,
+  type RunModelUsage,
 } from "./src/tool-store.js";
 import {
   extractToolResultText,
@@ -192,34 +194,26 @@ export function handleBeforeModelResolve(
 export const MODEL_REPORT_EVENT = "openclaw.model";
 
 export interface ModelCallEndedEvent {
-  type?: string; // "model.call.completed" | "model.call.error"
   runId?: string;
   sessionKey?: string;
   provider?: string;
   model?: string;
-  usage?: ModelCallUsage;
+  outcome?: string; // "completed" | "error"
 }
 
-/**
- * model_call_ended: tell the proxy which model answered and what it cost. OpenClaw fires this at the
- * end of every model call in a run — a tool loop makes several — naming the provider/model that
- * actually ran (the X-OpenClaw-Model override, the agent's default, or a fallback it fell to) with
- * that call's token usage. Emitted as a CUSTOM event carrying the run's cumulative numbers, so the
- * last one the proxy sees is the turn's total; the stream is still open, as the run hasn't finished.
- * The proxies record it on the interaction and withhold it from browsers. Failed calls are skipped:
- * the model that answered is the one of the last completed call.
- */
-export function handleModelCallEnded(
-  event: ModelCallEndedEvent,
-  ctx: { runId?: string; sessionKey?: string },
-): void {
-  if (event.type === "model.call.error") return;
-  const runId = event.runId ?? ctx.runId;
-  const sk = event.sessionKey ?? ctx.sessionKey ?? getRunSession(runId);
-  if (!runId || !sk || !event.provider || !event.model) return;
+export interface LlmOutputEvent {
+  runId?: string;
+  sessionKey?: string;
+  provider?: string;
+  model?: string;
+  usage?: ModelCallUsage & { total?: number; cost?: { total?: number } };
+}
+
+type HookContext = { runId?: string; sessionKey?: string };
+
+function emitModelReport(sk: string, totals: RunModelUsage): void {
   const writer = getWriter(sk);
   if (!writer) return;
-  const totals = recordModelCall(runId, event.provider, event.model, event.usage);
   writer({
     type: EventType.CUSTOM,
     name: MODEL_REPORT_EVENT,
@@ -228,9 +222,40 @@ export function handleModelCallEnded(
       model: totals.model,
       ref: `${totals.provider}/${totals.model}`,
       calls: totals.calls,
-      usage: { input: totals.input, output: totals.output, cacheRead: totals.cacheRead, cacheWrite: totals.cacheWrite },
+      usage: totals.usage,
+      costUsd: totals.costUsd,
     },
   });
+}
+
+/**
+ * model_call_ended: tell the proxy which model answered. OpenClaw fires this at the end of every
+ * model call in a run — a tool loop makes several — naming the provider/model that actually ran
+ * (the X-OpenClaw-Model override, the agent's default, or a fallback it fell to). It carries no
+ * token usage; that comes from llm_output. Emitted as a CUSTOM event the proxies record on the
+ * interaction and withhold from browsers; the stream is still open, as the run hasn't finished.
+ * Failed calls are skipped: the model that answered is the one of the last completed call.
+ */
+export function handleModelCallEnded(event: ModelCallEndedEvent, ctx: HookContext): void {
+  if (event.outcome === "error") return;
+  const runId = event.runId ?? ctx.runId;
+  const sk = event.sessionKey ?? ctx.sessionKey ?? getRunSession(runId);
+  if (!runId || !sk || !event.provider || !event.model) return;
+  emitModelReport(sk, recordModelCall(runId, event.provider, event.model));
+}
+
+/**
+ * llm_output: add the run's token usage (and OpenClaw's cost estimate) to the report. OpenClaw fires
+ * this once per run attempt as it finalizes, with the attempt's usage totals; it lands before the
+ * reply's TEXT_MESSAGE_END, so the writer is still open. It is a conversation hook, so it needs
+ * plugins.entries.clawg-ui.hooks.allowConversationAccess — without it the model is still reported,
+ * just not the tokens. The event names no session key; the hook context does.
+ */
+export function handleLlmOutput(event: LlmOutputEvent, ctx: HookContext): void {
+  const runId = event.runId ?? ctx.runId;
+  const sk = event.sessionKey ?? ctx.sessionKey ?? getRunSession(runId);
+  if (!runId || !sk || !event.provider || !event.model) return;
+  emitModelReport(sk, recordRunUsage(runId, event.provider, event.model, event.usage, event.usage?.cost?.total));
 }
 
 const plugin: {
@@ -280,6 +305,7 @@ const plugin: {
     api.on("before_tool_call", handleBeforeToolCall);
     api.on("before_model_resolve", handleBeforeModelResolve);
     api.on("model_call_ended", handleModelCallEnded);
+    api.on("llm_output", handleLlmOutput);
     api.on("tool_result_persist", handleToolResultPersist);
 
     // CLI commands for device management

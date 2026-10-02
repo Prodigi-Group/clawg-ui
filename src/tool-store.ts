@@ -218,19 +218,10 @@ export function clearRunSession(runId: string): void {
   runSessions.delete(runId);
 }
 
-// --- What the run's model calls reported (model_call_ended) ---
-// The model that answered and the run's token usage so far. A tool loop makes several calls in one
-// run, so usage is summed; the model is the latest call's — the one whose answer the user gets.
-
-export interface RunModelUsage {
-  provider: string;
-  model: string;
-  calls: number;
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-}
+// --- What the run reported about itself ---
+// model_call_ended (per call) names the model that ran; llm_output (per run attempt) brings the
+// attempt's token usage and OpenClaw's cost estimate. A tool loop makes several calls in one run,
+// so calls are counted and the model is the latest call's — the one whose answer the user gets.
 
 export interface ModelCallUsage {
   input?: number;
@@ -239,20 +230,51 @@ export interface ModelCallUsage {
   cacheWrite?: number;
 }
 
+export interface RunModelUsage {
+  provider: string;
+  model: string;
+  calls: number;
+  /** The run's token usage, once llm_output has reported it; null until then. */
+  usage: Required<ModelCallUsage> | null;
+  /** OpenClaw's own cost estimate for the run in USD, when it gave one. */
+  costUsd: number | null;
+}
+
 const runModelUsage = new Map<string, RunModelUsage>();
 
 const n = (v: number | undefined): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
-export function recordModelCall(runId: string, provider: string, model: string, usage?: ModelCallUsage): RunModelUsage {
+/** A model call finished: count it and note the model that ran. */
+export function recordModelCall(runId: string, provider: string, model: string): RunModelUsage {
   const prev = runModelUsage.get(runId);
   const next: RunModelUsage = {
     provider,
     model,
     calls: (prev?.calls ?? 0) + 1,
-    input: (prev?.input ?? 0) + n(usage?.input),
-    output: (prev?.output ?? 0) + n(usage?.output),
-    cacheRead: (prev?.cacheRead ?? 0) + n(usage?.cacheRead),
-    cacheWrite: (prev?.cacheWrite ?? 0) + n(usage?.cacheWrite),
+    usage: prev?.usage ?? null,
+    costUsd: prev?.costUsd ?? null,
+  };
+  runModelUsage.set(runId, next);
+  return next;
+}
+
+/** The run attempt's totals from llm_output: usage replaces (OpenClaw reports totals, not deltas). */
+export function recordRunUsage(
+  runId: string,
+  provider: string,
+  model: string,
+  usage: ModelCallUsage | undefined,
+  costUsd: number | undefined,
+): RunModelUsage {
+  const prev = runModelUsage.get(runId);
+  const next: RunModelUsage = {
+    provider,
+    model,
+    calls: prev?.calls ?? 0,
+    usage: usage
+      ? { input: n(usage.input), output: n(usage.output), cacheRead: n(usage.cacheRead), cacheWrite: n(usage.cacheWrite) }
+      : (prev?.usage ?? null),
+    costUsd: typeof costUsd === "number" && Number.isFinite(costUsd) ? costUsd : (prev?.costUsd ?? null),
   };
   runModelUsage.set(runId, next);
   return next;
