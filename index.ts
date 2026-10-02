@@ -13,10 +13,13 @@ import {
   getWriter,
   getMessageId,
   getModelOverride,
+  getRunSession,
+  recordModelCall,
   pushToolCallId,
   popToolCallId,
   isClientTool,
   setClientToolCalled,
+  type ModelCallUsage,
 } from "./src/tool-store.js";
 import {
   extractToolResultText,
@@ -185,6 +188,51 @@ export function handleBeforeModelResolve(
   return { providerOverride: ref.slice(0, slash), modelOverride: ref.slice(slash + 1) };
 }
 
+/** Name of the AG-UI CUSTOM event that reports the run's model and usage to the proxy. */
+export const MODEL_REPORT_EVENT = "openclaw.model";
+
+export interface ModelCallEndedEvent {
+  type?: string; // "model.call.completed" | "model.call.error"
+  runId?: string;
+  sessionKey?: string;
+  provider?: string;
+  model?: string;
+  usage?: ModelCallUsage;
+}
+
+/**
+ * model_call_ended: tell the proxy which model answered and what it cost. OpenClaw fires this at the
+ * end of every model call in a run — a tool loop makes several — naming the provider/model that
+ * actually ran (the X-OpenClaw-Model override, the agent's default, or a fallback it fell to) with
+ * that call's token usage. Emitted as a CUSTOM event carrying the run's cumulative numbers, so the
+ * last one the proxy sees is the turn's total; the stream is still open, as the run hasn't finished.
+ * The proxies record it on the interaction and withhold it from browsers. Failed calls are skipped:
+ * the model that answered is the one of the last completed call.
+ */
+export function handleModelCallEnded(
+  event: ModelCallEndedEvent,
+  ctx: { runId?: string; sessionKey?: string },
+): void {
+  if (event.type === "model.call.error") return;
+  const runId = event.runId ?? ctx.runId;
+  const sk = event.sessionKey ?? ctx.sessionKey ?? getRunSession(runId);
+  if (!runId || !sk || !event.provider || !event.model) return;
+  const writer = getWriter(sk);
+  if (!writer) return;
+  const totals = recordModelCall(runId, event.provider, event.model, event.usage);
+  writer({
+    type: EventType.CUSTOM,
+    name: MODEL_REPORT_EVENT,
+    value: {
+      provider: totals.provider,
+      model: totals.model,
+      ref: `${totals.provider}/${totals.model}`,
+      calls: totals.calls,
+      usage: { input: totals.input, output: totals.output, cacheRead: totals.cacheRead, cacheWrite: totals.cacheWrite },
+    },
+  });
+}
+
 const plugin: {
   id: string;
   name: string;
@@ -231,6 +279,7 @@ const plugin: {
 
     api.on("before_tool_call", handleBeforeToolCall);
     api.on("before_model_resolve", handleBeforeModelResolve);
+    api.on("model_call_ended", handleModelCallEnded);
     api.on("tool_result_persist", handleToolResultPersist);
 
     // CLI commands for device management

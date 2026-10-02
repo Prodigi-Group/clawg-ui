@@ -200,3 +200,64 @@ export function getModelOverride(runId: string | undefined, sessionKey: string |
 export function clearModelOverride(runId: string): void {
   runModelOverrides.delete(runId);
 }
+
+// --- Which conversation a run belongs to ---
+// Hooks that arrive keyed by run id (model_call_ended) find the session's SSE writer through this.
+
+const runSessions = new Map<string, string>();
+
+export function setRunSession(runId: string, sessionKey: string): void {
+  runSessions.set(runId, key(sessionKey));
+}
+
+export function getRunSession(runId: string | undefined): string | undefined {
+  return runId ? runSessions.get(runId) : undefined;
+}
+
+export function clearRunSession(runId: string): void {
+  runSessions.delete(runId);
+}
+
+// --- What the run's model calls reported (model_call_ended) ---
+// The model that answered and the run's token usage so far. A tool loop makes several calls in one
+// run, so usage is summed; the model is the latest call's — the one whose answer the user gets.
+
+export interface RunModelUsage {
+  provider: string;
+  model: string;
+  calls: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+export interface ModelCallUsage {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
+const runModelUsage = new Map<string, RunModelUsage>();
+
+const n = (v: number | undefined): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
+export function recordModelCall(runId: string, provider: string, model: string, usage?: ModelCallUsage): RunModelUsage {
+  const prev = runModelUsage.get(runId);
+  const next: RunModelUsage = {
+    provider,
+    model,
+    calls: (prev?.calls ?? 0) + 1,
+    input: (prev?.input ?? 0) + n(usage?.input),
+    output: (prev?.output ?? 0) + n(usage?.output),
+    cacheRead: (prev?.cacheRead ?? 0) + n(usage?.cacheRead),
+    cacheWrite: (prev?.cacheWrite ?? 0) + n(usage?.cacheWrite),
+  };
+  runModelUsage.set(runId, next);
+  return next;
+}
+
+export function clearModelUsage(runId: string): void {
+  runModelUsage.delete(runId);
+}
