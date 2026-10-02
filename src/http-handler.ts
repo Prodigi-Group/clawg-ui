@@ -16,6 +16,9 @@ import {
   clearClientToolNames,
   setModelOverride,
   clearModelOverride,
+  setRunSession,
+  clearRunSession,
+  clearModelUsage,
 } from "./tool-store.js";
 import { aguiChannelPlugin } from "./channel.js";
 import { resolveGatewaySecret, resolveTrustedToken } from "./gateway-secret.js";
@@ -914,6 +917,8 @@ async function dispatchAuthenticatedAguiRequest(
     // Applied by the before_model_resolve hook; anything not shaped like "provider/model" is ignored.
     const modelOverride = resolveModelOverrideHeader(req.headers["x-openclaw-model"]);
     setModelOverride(runId, sessionKey, modelOverride);
+    // model_call_ended arrives keyed by run id; this is how it finds this conversation's writer.
+    setRunSession(runId, sessionKey);
 
     // Register SSE writer so before/after_tool_call hooks can emit AG-UI events
     setWriter(sessionKey, writeEvent, currentMessageId);
@@ -1209,6 +1214,8 @@ async function dispatchAuthenticatedAguiRequest(
       clearClientToolCalled(sessionKey);
       clearClientToolNames(sessionKey);
       clearModelOverride(runId);
+      clearRunSession(runId);
+      clearModelUsage(runId);
       await cleanupAttachments(extractedAttachments);
     }
 }
