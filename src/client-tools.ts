@@ -1,4 +1,5 @@
 import { popTools } from "./tool-store.js";
+import { redactForLog } from "./log-redact.js";
 
 /**
  * Plugin tool factory registered via `api.registerTool`.
@@ -36,7 +37,7 @@ export function clawgUiToolFactory(ctx: { sessionKey?: string }) {
       // The run ends, and the client initiates a new run with the tool result.
       // Return args so the agent loop can continue (the dispatcher will
       // suppress any text output after a client tool call).
-      console.log(`[clawg-ui] client tool execute: name=${t.name}, args=${JSON.stringify(args)}`);
+      console.log(`[clawg-ui] client tool execute: name=${t.name}, args=${redactForLog(args)}`);
       return {
         content: [
           {

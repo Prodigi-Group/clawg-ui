@@ -22,6 +22,7 @@ import {
 } from "./tool-store.js";
 import { aguiChannelPlugin } from "./channel.js";
 import { resolveGatewaySecret, resolveTrustedToken } from "./gateway-secret.js";
+import { redactForLog } from "./log-redact.js";
 
 // ---------------------------------------------------------------------------
 // Lightweight HTTP helpers (no internal imports needed)
@@ -691,7 +692,7 @@ async function dispatchAuthenticatedAguiRequest(
 
     // Log incoming messages for debugging tool result flow
     console.log(`[clawg-ui] Incoming messages (${messages.length}):`, 
-      messages.map(m => ({ role: m.role, contentType: typeof m.content, content: JSON.stringify(m.content)?.slice(0, 200) }))
+      messages.map(m => ({ role: m.role, contentType: typeof m.content, content: redactForLog(m.content, 200) }))
     );
 
     const hasUserMessage = messages.some((m) => m.role === "user");
@@ -748,7 +749,7 @@ async function dispatchAuthenticatedAguiRequest(
 
     if (!messageBody.trim()) {
       console.log(
-        `[clawg-ui] 400: empty extracted body, roles=[${messages.map((m) => m.role).join(",")}], contents=[${messages.map((m) => JSON.stringify(m.content)).join(",")}]`,
+        `[clawg-ui] 400: empty extracted body, roles=[${messages.map((m) => m.role).join(",")}], contents=[${messages.map((m) => redactForLog(m.content, 200)).join(",")}]`,
       );
       await cleanupAttachments(extractedAttachments);
       sendJson(res, 400, {
