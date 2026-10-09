@@ -9,6 +9,7 @@ import {
   createOperatorAguiHttpHandler,
 } from "./src/http-handler.js";
 import { clawgUiToolFactory } from "./src/client-tools.js";
+import { redactForLog } from "./src/log-redact.js";
 import {
   getWriter,
   getMessageId,
@@ -53,7 +54,7 @@ export function handleBeforeToolCall(
 ): void {
   const sk = ctx.sessionKey;
   console.log(
-    `[clawg-ui] before_tool_call: tool=${event.toolName}, sessionKey=${sk ?? "none"}, hasParams=${!!(event.params && Object.keys(event.params).length > 0)}, params=${JSON.stringify(event.params ?? {})}`,
+    `[clawg-ui] before_tool_call: tool=${event.toolName}, sessionKey=${sk ?? "none"}, hasParams=${!!(event.params && Object.keys(event.params).length > 0)}, params=${redactForLog(event.params ?? {})}`,
   );
   if (!sk) {
     console.log(`[clawg-ui] before_tool_call: skipping, no sessionKey`);
@@ -77,7 +78,7 @@ export function handleBeforeToolCall(
   });
   if (event.params && Object.keys(event.params).length > 0) {
     console.log(
-      `[clawg-ui] before_tool_call: emitting TOOL_CALL_ARGS, params=${JSON.stringify(event.params)}`,
+      `[clawg-ui] before_tool_call: emitting TOOL_CALL_ARGS, params=${redactForLog(event.params)}`,
     );
     writer({
       type: EventType.TOOL_CALL_ARGS,
@@ -117,7 +118,7 @@ export function handleToolResultPersist(
 ): void {
   const sk = ctx.sessionKey;
   console.log(
-    `[clawg-ui] tool_result_persist: sessionKey=${sk ?? "none"}, event=${JSON.stringify(event)}`,
+    `[clawg-ui] tool_result_persist: sessionKey=${sk ?? "none"}, event=${redactForLog(event)}`,
   );
   if (!sk) {
     console.log(
