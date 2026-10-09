@@ -619,6 +619,95 @@ describe("AG-UI HTTP handler", () => {
     expect(reasonContent.map((e) => e.delta).join("")).toBe("Let me think about it carefully.");
   });
 
+  it("does not resend reasoning the client already has when one reasoning item ends and the next starts", async () => {
+    // A Responses-API model (OpenAI) emits several reasoning items per assistant message. OpenClaw
+    // signals onReasoningEnd after EACH item, but the text it streams for the next one is the whole
+    // message's thinking so far: every item, joined with "\n". Forgetting what had been sent at each
+    // end made the next item's first tick re-send everything, so the client showed items 1, then
+    // 1+2, then 1+2+3 (seen on the support agent running gpt-6-luna).
+    const item1 = "**Considering platforms**\n\nShopify or Etsy.";
+    const item2 = `${item1}\n**Comparing fees**\n\nEtsy charges 6.5%.`;
+    const item3 = `${item2}\n**Deciding**\n\nSuggest Etsy.`;
+    const rt = (fakeApi as any).runtime;
+    rt.channel.reply.dispatchReplyFromConfig.mockImplementation(
+      async ({ dispatcher, replyOptions }: { dispatcher: any; replyOptions: any }) => {
+        replyOptions.onReasoningStream({ text: "**Considering platforms**" });
+        replyOptions.onReasoningStream({ text: item1 });
+        replyOptions.onReasoningEnd();
+        replyOptions.onReasoningStream({ text: `${item1}\n**Comparing fees**` });
+        replyOptions.onReasoningStream({ text: item2 });
+        replyOptions.onReasoningEnd();
+        replyOptions.onReasoningStream({ text: item3 });
+        replyOptions.onReasoningEnd();
+        dispatcher.sendFinalReply({ text: "Etsy." });
+        return { queuedFinal: true, counts: { tool: 0, block: 0, final: 1 } };
+      },
+    );
+
+    const token = createDeviceToken(GATEWAY_SECRET, APPROVED_DEVICE_ID);
+    const req = createReq({
+      headers: { authorization: `Bearer ${token}` },
+      body: {
+        threadId: "t-reason-items",
+        runId: "r-reason-items",
+        messages: [{ role: "user", content: "Which platform?" }],
+      },
+    });
+    const res = createRes();
+    await handler(req, res);
+
+    const events = parseEvents(res._chunks);
+    const reasonContent = events.filter((e) => e.type === EventType.REASONING_MESSAGE_CONTENT);
+    const byMessage = new Map<string, string>();
+    for (const e of reasonContent) byMessage.set(e.messageId, (byMessage.get(e.messageId) ?? "") + e.delta);
+
+    // Three reasoning messages, each carrying only its own item.
+    expect([...byMessage.values()]).toEqual([
+      item1,
+      "**Comparing fees**\n\nEtsy charges 6.5%.",
+      "**Deciding**\n\nSuggest Etsy.",
+    ]);
+    const all = reasonContent.map((e) => e.delta).join("");
+    expect(all.match(/Considering platforms/g)).toHaveLength(1);
+  });
+
+  it("streams a fresh reasoning buffer in full after a tool call", async () => {
+    // After a tool result OpenClaw starts a new assistant message and its reasoning text starts
+    // over. That text does not extend what was sent, so it is new and goes out whole.
+    const rt = (fakeApi as any).runtime;
+    rt.channel.reply.dispatchReplyFromConfig.mockImplementation(
+      async ({ dispatcher, replyOptions }: { dispatcher: any; replyOptions: any }) => {
+        replyOptions.onReasoningStream({ text: "Need the order first." });
+        replyOptions.onReasoningEnd();
+        replyOptions.onReasoningStream({ text: "Order is in production." });
+        replyOptions.onReasoningStream({ text: "Order is in production. Say so." });
+        replyOptions.onReasoningEnd();
+        dispatcher.sendFinalReply({ text: "In production." });
+        return { queuedFinal: true, counts: { tool: 0, block: 0, final: 1 } };
+      },
+    );
+
+    const token = createDeviceToken(GATEWAY_SECRET, APPROVED_DEVICE_ID);
+    const req = createReq({
+      headers: { authorization: `Bearer ${token}` },
+      body: {
+        threadId: "t-reason-fresh",
+        runId: "r-reason-fresh",
+        messages: [{ role: "user", content: "Where is my order?" }],
+      },
+    });
+    const res = createRes();
+    await handler(req, res);
+
+    const events = parseEvents(res._chunks);
+    const reasonContent = events.filter((e) => e.type === EventType.REASONING_MESSAGE_CONTENT);
+    expect(reasonContent.map((e) => e.delta)).toEqual([
+      "Need the order first.",
+      "Order is in production.",
+      " Say so.",
+    ]);
+  });
+
   it("does not emit REASONING events when no reasoning stream fires", async () => {
     const rt = (fakeApi as any).runtime;
     rt.channel.reply.dispatchReplyFromConfig.mockImplementation(

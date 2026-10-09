@@ -851,6 +851,13 @@ async function dispatchAuthenticatedAguiRequest(
     // AG-UI REASONING_MESSAGE_CONTENT.delta is incremental (the client appends), so we must emit
     // only the new suffix — tracking what's already been emitted here. Emitting `text` verbatim
     // makes clients concatenate snapshots and duplicate the reasoning.
+    //
+    // Tracked for the whole run, not per reasoning message. OpenClaw rebuilds the text from every
+    // thinking block of the assistant message, and a Responses-API model (OpenAI) emits several
+    // reasoning items per message, each of which OpenClaw closes with onReasoningEnd. Forgetting
+    // the sent text at each end made the next item's first tick re-send the lot (items 1, then
+    // 1+2, then 1+2+3). A text that doesn't extend what was sent is a fresh buffer (a new model
+    // call after a tool result) and goes out whole.
     let reasoningEmitted = "";
 
     // Step reporting state
@@ -869,7 +876,6 @@ async function dispatchAuthenticatedAguiRequest(
         });
         reasoningStarted = false;
         reasoningMessageId = null;
-        reasoningEmitted = "";
       }
     };
 
@@ -1107,9 +1113,18 @@ async function dispatchAuthenticatedAguiRequest(
                   const text = payload.text;
                   if (!text) return;
 
+                  // Emit only the new slice. `text` is cumulative; normally it extends what we've
+                  // already sent, so the delta is the suffix. A text that doesn't is a fresh buffer
+                  // and goes out whole.
+                  let delta = text.startsWith(reasoningEmitted)
+                    ? text.slice(reasoningEmitted.length)
+                    : text;
+                  reasoningEmitted = text;
+                  // OpenClaw joins thinking blocks with "\n"; at the head of a new message it is noise.
+                  if (!reasoningStarted) delta = delta.replace(/^\n+/, "");
+                  if (!delta) return;
                   if (!reasoningStarted) {
                     reasoningStarted = true;
-                    reasoningEmitted = "";
                     reasoningMessageId = `reason-${randomUUID()}`;
                     writeEvent({
                       type: EventType.REASONING_START,
@@ -1121,14 +1136,6 @@ async function dispatchAuthenticatedAguiRequest(
                       role: "reasoning",
                     });
                   }
-                  // Emit only the new slice. `text` is cumulative; normally it extends what we've
-                  // already sent, so the delta is the suffix. If it ever doesn't (unexpected reset),
-                  // fall back to sending the whole thing.
-                  const delta = text.startsWith(reasoningEmitted)
-                    ? text.slice(reasoningEmitted.length)
-                    : text;
-                  reasoningEmitted = text;
-                  if (!delta) return;
                   writeEvent({
                     type: EventType.REASONING_MESSAGE_CONTENT,
                     messageId: reasoningMessageId,
@@ -1147,7 +1154,6 @@ async function dispatchAuthenticatedAguiRequest(
                   });
                   reasoningStarted = false;
                   reasoningMessageId = null;
-                  reasoningEmitted = "";
                 },
               }
             : {}),
