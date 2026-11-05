@@ -16,9 +16,10 @@ const BEARER = /\b((?:Bearer|Basic)\s+)[A-Za-z0-9._~+/=-]{8,}/gi;
 const JWT = /\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}/g;
 // `x-api-key: k`, `api_key=k`, `PGPASSWORD=k`, `client_secret: k`. Skips values that are an env-var
 // reference ($NAME), a plain number (max_tokens: 4096), already redacted, or a Bearer/Basic scheme
-// (BEARER has masked the credential after it).
+// (BEARER has masked the credential after it). "Plain number" means the digits are the whole value:
+// `12345678-e5f6-…` starts with digits but is a key, so the number must end where the value ends.
 const KEY_VALUE =
-  /\b([A-Za-z0-9_-]*(?:token|password|passwd|secret|api[-_]?key|authorization|credential)[A-Za-z0-9_-]*\s*[:=]\s*)(?!\$|\[REDACTED\]|(?:Bearer|Basic)\b|\d+\b)[^\s"'\\,;&)}\]]+/gi;
+  /\b([A-Za-z0-9_-]*(?:token|password|passwd|secret|api[-_]?key|authorization|credential)[A-Za-z0-9_-]*\s*[:=]\s*)(?!\$|\[REDACTED\]|(?:Bearer|Basic)\b|\d+(?![^\s"'\\,;&)}\]]))[^\s"'\\,;&)}\]]+/gi;
 const SAS_SIG = /([?&]sig=)(?!\[REDACTED\])[^&\s"'\\]+/gi;
 
 export const REDACTED = "[REDACTED]";
