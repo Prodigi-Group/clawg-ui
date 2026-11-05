@@ -40,6 +40,13 @@ describe("redactForLog", () => {
     expect(out).toContain("https://rest.logentries.com/management/logs | head -50"); // the rest stays readable
   });
 
+  it("masks a key that starts with digits (a number followed by more characters isn't a count)", () => {
+    expect(redactText(`curl -H "x-api-key: 12345678-e5f6-4711-8899-aabbccddeeff" https://x`))
+      .toBe(`curl -H "x-api-key: ${REDACTED}" https://x`);
+    expect(redactText("api_key=1234abcd5678")).toBe(`api_key=${REDACTED}`);
+    expect(redactText("token: 42.secretpart")).toBe(`token: ${REDACTED}`);
+  });
+
   it("masks credential-named key=value and key: value pairs in free text", () => {
     expect(redactText("X-API-Key: sk_live_0123456789")).toBe(`X-API-Key: ${REDACTED}`);
     expect(redactText("GET /v1/items?api_key=abc123def456&page=2")).toBe(`GET /v1/items?api_key=${REDACTED}&page=2`);
